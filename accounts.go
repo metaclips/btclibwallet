@@ -5,7 +5,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/v2"
+	"github.com/btcsuite/btcwallet/waddrmgr"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/decred/dcrwallet/errors/v2"
 )
 
@@ -20,7 +21,7 @@ func (wallet *Wallet) GetAccounts() (string, error) {
 }
 
 func (wallet *Wallet) GetAccountsRaw() (*Accounts, error) {
-	resp, err := wallet.internal.Accounts(wallet.shutdownContext())
+	resp, err := wallet.internal.Accounts(waddrmgr.KeyScopeBIP0044)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +70,7 @@ func (accountsInterator *AccountsIterator) Reset() {
 }
 
 func (wallet *Wallet) GetAccount(accountNumber int32) (*Account, error) {
-	props, err := wallet.internal.AccountProperties(wallet.shutdownContext(), uint32(accountNumber))
+	props, err := wallet.internal.AccountProperties(waddrmgr.KeyScopeBIP0044, uint32(accountNumber))
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +86,8 @@ func (wallet *Wallet) GetAccount(accountNumber int32) (*Account, error) {
 		Name:             props.AccountName,
 		TotalBalance:     balance.Total,
 		Balance:          balance,
-		ExternalKeyCount: int32(props.LastUsedExternalIndex + 20),
-		InternalKeyCount: int32(props.LastUsedInternalIndex + 20),
+		ExternalKeyCount: int32(props.ExternalKeyCount),
+		InternalKeyCount: int32(props.InternalKeyCount),
 		ImportedKeyCount: int32(props.ImportedKeyCount),
 	}
 
@@ -94,24 +95,20 @@ func (wallet *Wallet) GetAccount(accountNumber int32) (*Account, error) {
 }
 
 func (wallet *Wallet) GetAccountBalance(accountNumber int32) (*Balance, error) {
-	balance, err := wallet.internal.CalculateAccountBalance(wallet.shutdownContext(), uint32(accountNumber), wallet.RequiredConfirmations())
+	balance, err := wallet.internal.CalculateAccountBalances(uint32(accountNumber), wallet.RequiredConfirmations())
 	if err != nil {
 		return nil, err
 	}
 
 	return &Balance{
-		Total:                   int64(balance.Total),
-		Spendable:               int64(balance.Spendable),
-		ImmatureReward:          int64(balance.ImmatureCoinbaseRewards),
-		ImmatureStakeGeneration: int64(balance.ImmatureStakeGeneration),
-		LockedByTickets:         int64(balance.LockedByTickets),
-		VotingAuthority:         int64(balance.VotingAuthority),
-		UnConfirmed:             int64(balance.Unconfirmed),
+		Total:          int64(balance.Total),
+		Spendable:      int64(balance.Spendable),
+		ImmatureReward: int64(balance.ImmatureReward),
 	}, nil
 }
 
 func (wallet *Wallet) SpendableForAccount(account int32) (int64, error) {
-	bals, err := wallet.internal.CalculateAccountBalance(wallet.shutdownContext(), uint32(account), wallet.RequiredConfirmations())
+	bals, err := wallet.internal.CalculateAccountBalances(uint32(account), wallet.RequiredConfirmations())
 	if err != nil {
 		log.Error(err)
 		return 0, translateError(err)
@@ -128,20 +125,19 @@ func (wallet *Wallet) NextAccount(accountName string, privPass []byte) (int32, e
 		lock <- time.Time{} // send matters, not the value
 	}()
 
-	ctx := wallet.shutdownContext()
-	err := wallet.internal.Unlock(ctx, privPass, lock)
+	err := wallet.internal.Unlock(privPass, lock)
 	if err != nil {
 		log.Error(err)
 		return 0, errors.New(ErrInvalidPassphrase)
 	}
 
-	accountNumber, err := wallet.internal.NextAccount(ctx, accountName)
+	accountNumber, err := wallet.internal.NextAccount(waddrmgr.KeyScopeBIP0044, accountName)
 
 	return int32(accountNumber), err
 }
 
 func (wallet *Wallet) RenameAccount(accountNumber int32, newName string) error {
-	err := wallet.internal.RenameAccount(wallet.shutdownContext(), uint32(accountNumber), newName)
+	err := wallet.internal.RenameAccount(waddrmgr.KeyScopeBIP0044, uint32(accountNumber), newName)
 	if err != nil {
 		return translateError(err)
 	}
@@ -159,33 +155,19 @@ func (wallet *Wallet) AccountName(accountNumber int32) string {
 }
 
 func (wallet *Wallet) AccountNameRaw(accountNumber uint32) (string, error) {
-	return wallet.internal.AccountName(wallet.shutdownContext(), accountNumber)
+	return wallet.internal.AccountName(waddrmgr.KeyScopeBIP0044, accountNumber)
 }
 
 func (wallet *Wallet) AccountNumber(accountName string) (uint32, error) {
-	return wallet.internal.AccountNumber(wallet.shutdownContext(), accountName)
+	return wallet.internal.AccountNumber(waddrmgr.KeyScopeBIP0044, accountName)
 }
 
 func (wallet *Wallet) HDPathForAccount(accountNumber int32) (string, error) {
-	cointype, err := wallet.internal.CoinType(wallet.shutdownContext())
-	if err != nil {
-		return "", translateError(err)
-	}
-
 	var hdPath string
-	isLegacyCoinType := cointype == wallet.chainParams.LegacyCoinType
-	if wallet.chainParams.Name == chaincfg.MainNetParams().Name {
-		if isLegacyCoinType {
-			hdPath = LegacyMainnetHDPath
-		} else {
-			hdPath = MainnetHDPath
-		}
+	if wallet.chainParams.Name == chaincfg.MainNetParams.Name {
+		hdPath = MainnetHDPath
 	} else {
-		if isLegacyCoinType {
-			hdPath = LegacyTestnetHDPath
-		} else {
-			hdPath = TestnetHDPath
-		}
+		hdPath = TestnetHDPath
 	}
 
 	return hdPath + strconv.Itoa(int(accountNumber)), nil

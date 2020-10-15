@@ -13,14 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/v2"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcutil/hdkeychain"
+	"github.com/btcsuite/btcwallet/wallet"
 	"github.com/decred/dcrd/dcrutil/v2"
-	"github.com/decred/dcrd/hdkeychain/v2"
-	"github.com/decred/dcrwallet/errors/v2"
-	"github.com/decred/dcrwallet/wallet/v3"
-	"github.com/decred/dcrwallet/wallet/v3/txrules"
 	"github.com/decred/dcrwallet/walletseed"
-	"github.com/planetdecred/dcrlibwallet/internal/loader"
 )
 
 const (
@@ -32,8 +29,12 @@ const (
 	// Use 80% of estimated total headers fetch time to estimate address discovery time
 	DiscoveryPercentage = 0.8
 
-	MaxAmountAtom = dcrutil.MaxAmount
-	MaxAmountDcr  = dcrutil.MaxAmount / dcrutil.AtomsPerCoin
+	AtomsPerCoin = 1e8
+
+	// MaxAmount is the maximum transaction amount allowed in atoms.
+	// Decred - Changeme for release
+	MaxAmountAtom = 21e6 * AtomsPerCoin
+	MaxAmountDcr  = MaxAmountAtom / AtomsPerCoin
 
 	TestnetHDPath       = "m / 44' / 1' / "
 	LegacyTestnetHDPath = "m / 44’ / 11’ / "
@@ -89,18 +90,18 @@ func (mw *MultiWallet) contextWithShutdownCancel() (context.Context, context.Can
 	return ctx, cancel
 }
 
-func (mw *MultiWallet) ValidateExtPubKey(extendedPubKey string) error {
-	_, err := hdkeychain.NewKeyFromString(extendedPubKey, mw.chainParams)
-	if err != nil {
-		if err == hdkeychain.ErrInvalidChild {
-			return errors.New(ErrUnusableSeed)
-		}
+// func (mw *MultiWallet) ValidateExtPubKey(extendedPubKey string) error {
+// 	_, err := hdkeychain.NewKeyFromString(extendedPubKey, mw.chainParams)
+// 	if err != nil {
+// 		if err == hdkeychain.ErrInvalidChild {
+// 			return errors.New(ErrUnusableSeed)
+// 		}
 
-		return errors.New(ErrInvalid)
-	}
+// 		return errors.New(ErrInvalid)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func NormalizeAddress(addr string, defaultPort string) (string, error) {
 	// If the first SplitHostPort errors because of a missing port and not
@@ -127,7 +128,7 @@ func GenerateSeed() (string, error) {
 		return "", err
 	}
 
-	return walletseed.EncodeMnemonic(seed), nil
+	return hex.EncodeToString(seed), nil
 }
 
 func VerifySeed(seedMnemonic string) bool {
@@ -278,21 +279,12 @@ func backupFile(fileName string, suffix int) (newName string, err error) {
 	return newName, nil
 }
 
-func initWalletLoader(chainParams *chaincfg.Params, walletDataDir, walletDbDriver string) *loader.Loader {
-	defaultFeePerKb := txrules.DefaultRelayFeePerKb.ToCoin()
-	stakeOptions := &loader.StakeOptions{
-		VotingEnabled: false,
-		AddressReuse:  false,
-		VotingAddress: nil,
-		TicketFee:     defaultFeePerKb,
-	}
+func initWalletLoader(chainParams *chaincfg.Params, walletDataDir string) *wallet.Loader {
+	walletLoader := wallet.NewLoader(chainParams, walletDataDir, true, 250)
 
-	walletLoader := loader.NewLoader(chainParams, walletDataDir, stakeOptions, 20, false,
-		defaultFeePerKb, wallet.DefaultAccountGapLimit, false)
-
-	if walletDbDriver != "" {
-		walletLoader.SetDatabaseDriver(walletDbDriver)
-	}
+	// if walletDbDriver != "" {
+	// 	walletLoader.SetDatabaseDriver(walletDbDriver)
+	// }
 
 	return walletLoader
 }

@@ -2,15 +2,15 @@ package dcrlibwallet
 
 import (
 	"context"
-	"net"
+	"golang.org/x/sync/errgroup"
+	"path/filepath"
 	"strings"
 	"sync"
 
-	"github.com/decred/dcrd/addrmgr"
+	"github.com/btcsuite/btcwallet/chain"
+	"github.com/btcsuite/btcwallet/walletdb"
 	"github.com/decred/dcrwallet/errors/v2"
-	"github.com/decred/dcrwallet/p2p/v2"
-	w "github.com/decred/dcrwallet/wallet/v3"
-	"github.com/planetdecred/dcrlibwallet/spv"
+	"github.com/lightninglabs/neutrino"
 )
 
 // reading/writing of properties of this struct are protected by mutex.x
@@ -22,9 +22,10 @@ type syncData struct {
 
 	synced       bool
 	syncing      bool
+	chainClient  chain.Interface
+	syncCanceled chan struct{}
 	cancelSync   context.CancelFunc
 	cancelRescan context.CancelFunc
-	syncCanceled chan struct{}
 
 	// Flag to notify syncCanceled callback if the sync was canceled so as to be restarted.
 	restartSyncRequested bool
@@ -39,9 +40,7 @@ type syncData struct {
 type activeSyncData struct {
 	syncStage int32
 
-	headersFetchProgress     HeadersFetchProgressReport
-	addressDiscoveryProgress AddressDiscoveryProgressReport
-	headersRescanProgress    HeadersRescanProgressReport
+	cFiltersFetchProgress CFiltersFetchProgressReport
 
 	beginFetchTimeStamp   int64
 	startHeaderHeight     int32
@@ -66,22 +65,15 @@ const (
 )
 
 func (mw *MultiWallet) initActiveSyncData() {
-	headersFetchProgress := HeadersFetchProgressReport{}
-	headersFetchProgress.GeneralSyncProgress = &GeneralSyncProgress{}
-
-	addressDiscoveryProgress := AddressDiscoveryProgressReport{}
-	addressDiscoveryProgress.GeneralSyncProgress = &GeneralSyncProgress{}
-
-	headersRescanProgress := HeadersRescanProgressReport{}
-	headersRescanProgress.GeneralSyncProgress = &GeneralSyncProgress{}
-
 	mw.syncData.mu.Lock()
+
+	cFiltersFetchProgress := CFiltersFetchProgressReport{}
+	cFiltersFetchProgress.GeneralSyncProgress = &GeneralSyncProgress{}
+
 	mw.syncData.activeSyncData = &activeSyncData{
 		syncStage: InvalidSyncStage,
 
-		headersFetchProgress:     headersFetchProgress,
-		addressDiscoveryProgress: addressDiscoveryProgress,
-		headersRescanProgress:    headersRescanProgress,
+		cFiltersFetchProgress: cFiltersFetchProgress,
 
 		beginFetchTimeStamp:       -1,
 		headersFetchTimeSpent:     -1,
@@ -109,7 +101,8 @@ func (mw *MultiWallet) AddSyncProgressListener(syncProgressListener SyncProgress
 	mw.syncData.mu.Unlock()
 
 	// If sync is already on, notify this newly added listener of the current progress report.
-	return mw.PublishLastSyncProgress(uniqueIdentifier)
+	// return mw.PublishLastSyncProgress(uniqueIdentifier)
+	return nil
 }
 
 func (mw *MultiWallet) RemoveSyncProgressListener(uniqueIdentifier string) {
@@ -130,28 +123,28 @@ func (mw *MultiWallet) syncProgressListeners() []SyncProgressListener {
 	return listeners
 }
 
-func (mw *MultiWallet) PublishLastSyncProgress(uniqueIdentifier string) error {
-	mw.syncData.mu.RLock()
-	defer mw.syncData.mu.RUnlock()
+// func (mw *MultiWallet) PublishLastSyncProgress(uniqueIdentifier string) error {
+// 	mw.syncData.mu.RLock()
+// 	defer mw.syncData.mu.RUnlock()
 
-	syncProgressListener, exists := mw.syncData.syncProgressListeners[uniqueIdentifier]
-	if !exists {
-		return errors.New(ErrInvalid)
-	}
+// 	syncProgressListener, exists := mw.syncData.syncProgressListeners[uniqueIdentifier]
+// 	if !exists {
+// 		return errors.New(ErrInvalid)
+// 	}
 
-	if mw.syncData.syncing && mw.syncData.activeSyncData != nil {
-		switch mw.syncData.activeSyncData.syncStage {
-		case HeadersFetchSyncStage:
-			syncProgressListener.OnHeadersFetchProgress(&mw.syncData.headersFetchProgress)
-		case AddressDiscoverySyncStage:
-			syncProgressListener.OnAddressDiscoveryProgress(&mw.syncData.addressDiscoveryProgress)
-		case HeadersRescanSyncStage:
-			syncProgressListener.OnHeadersRescanProgress(&mw.syncData.headersRescanProgress)
-		}
-	}
+// 	if mw.syncData.syncing && mw.syncData.activeSyncData != nil {
+// 		switch mw.syncData.activeSyncData.syncStage {
+// 		case HeadersFetchSyncStage:
+// 			syncProgressListener.OnHeadersFetchProgress(&mw.syncData.headersFetchProgress)
+// 		case AddressDiscoverySyncStage:
+// 			syncProgressListener.OnAddressDiscoveryProgress(&mw.syncData.addressDiscoveryProgress)
+// 		case HeadersRescanSyncStage:
+// 			syncProgressListener.OnHeadersRescanProgress(&mw.syncData.headersRescanProgress)
+// 		}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func (mw *MultiWallet) EnableSyncLogs() {
 	mw.syncData.mu.Lock()
@@ -181,10 +174,6 @@ func (mw *MultiWallet) SpvSync() error {
 		return errors.New(ErrSyncAlreadyInProgress)
 	}
 
-	addr := &net.TCPAddr{IP: net.ParseIP("::1"), Port: 0}
-	addrManager := addrmgr.New(mw.rootDir, net.LookupIP) // TODO: be mindful of tor
-	lp := p2p.NewLocalPeer(mw.chainParams, addr, addrManager)
-
 	var validPeerAddresses []string
 	peerAddresses := mw.ReadStringConfigValueForKey(SpvPersistentPeerAddressesConfigKey)
 	if peerAddresses != "" {
@@ -207,55 +196,69 @@ func (mw *MultiWallet) SpvSync() error {
 	// to calculate sync estimates only during sync
 	mw.initActiveSyncData()
 
-	wallets := make(map[int]*w.Wallet)
-	for id, wallet := range mw.wallets {
-		wallets[id] = wallet.internal
-		wallet.waiting = true
-		wallet.syncing = true
-	}
+	wallet := mw.wallets[1]
+	wallet.waiting = true
+	wallet.syncing = true
 
-	syncer := spv.NewSyncer(wallets, lp)
-	syncer.SetNotifications(mw.spvSyncNotificationCallbacks())
-	if len(validPeerAddresses) > 0 {
-		syncer.SetPersistentPeers(validPeerAddresses)
-	}
-
-	mw.setNetworkBackend(syncer)
-
-	ctx, cancel := mw.contextWithShutdownCancel()
-
-	var restartSyncRequested bool
-
-	mw.syncData.mu.Lock()
-	restartSyncRequested = mw.syncData.restartSyncRequested
-	mw.syncData.restartSyncRequested = false
-	mw.syncData.syncing = true
-	mw.syncData.cancelSync = cancel
-	mw.syncData.syncCanceled = make(chan struct{})
-	mw.syncData.mu.Unlock()
-
-	for _, listener := range mw.syncProgressListeners() {
-		listener.OnSyncStarted(restartSyncRequested)
-	}
-
-	// syncer.Run uses a wait group to block the thread until the sync context
-	// expires or is canceled or some other error occurs such as
-	// losing connection to all persistent peers.
 	go func() {
-		syncError := syncer.Run(ctx)
-		//sync has ended or errored
-		if syncError != nil {
-			if syncError == context.DeadlineExceeded {
-				mw.notifySyncError(errors.Errorf("SPV synchronization deadline exceeded: %v", syncError))
-			} else if syncError == context.Canceled {
-				close(mw.syncData.syncCanceled)
-				mw.notifySyncCanceled()
-			} else {
-				mw.notifySyncError(syncError)
-			}
+		neutrino.MaxPeers = neutrino.MaxPeers
+		neutrino.BanDuration = neutrino.BanDuration
+		neutrino.BanThreshold = neutrino.BanThreshold
+
+		var (
+			chainService *neutrino.ChainService
+			spvdb        walletdb.DB
+		)
+		spvdb, err := walletdb.Create("bdb",
+			filepath.Join(mw.rootDir, "neutrino.db"), true)
+		defer spvdb.Close()
+		if err != nil {
+			log.Errorf("Unable to create Neutrino DB: %s", err)
+			return
 		}
 
-		//reset sync variables
+		chainService, err = neutrino.NewChainService(
+			neutrino.Config{
+				DataDir:      mw.rootDir,
+				Database:     spvdb,
+				ChainParams:  *mw.chainParams,
+				ConnectPeers: validPeerAddresses,
+				AddPeers:     validPeerAddresses, //TODO
+			}, mw.spvSyncNotificationCallbacks())
+		if err != nil {
+			log.Errorf("Couldn't create Neutrino ChainService: %s", err)
+			return
+		}
+
+		log.Info("Starting spv")
+		chainClient := chain.NewNeutrinoClient(mw.chainParams, chainService)
+		err = chainClient.Start()
+		if err != nil {
+			log.Errorf("Couldn't start Neutrino client: %s", err)
+			return
+		}
+
+		mw.setNetworkBackend(chainClient)
+		wallet.internal.SynchronizeRPC(chainClient)
+
+		var restartSyncRequested bool
+
+		mw.syncData.mu.Lock()
+		restartSyncRequested = mw.syncData.restartSyncRequested
+		mw.syncData.restartSyncRequested = false
+		mw.syncData.syncing = true
+		mw.syncData.syncCanceled = make(chan struct{})
+		mw.syncData.mu.Unlock()
+
+		for _, listener := range mw.syncProgressListeners() {
+			listener.OnSyncStarted(restartSyncRequested)
+		}
+
+		chainClient.WaitForShutdown()
+		chainClient.Stop()
+		log.Info("Chainclient stopped")
+		close(mw.syncData.syncCanceled)
+
 		mw.resetSyncData()
 	}()
 	return nil
@@ -272,16 +275,13 @@ func (mw *MultiWallet) RestartSpvSync() error {
 
 func (mw *MultiWallet) CancelSync() {
 	mw.syncData.mu.RLock()
-	cancelSync := mw.syncData.cancelSync
+	chainClient := mw.syncData.chainClient
 	mw.syncData.mu.RUnlock()
 
-	if cancelSync != nil {
+	if chainClient != nil {
 		log.Info("Canceling sync. May take a while for sync to fully cancel.")
 
-		// Cancel the context used for syncer.Run in spvSync().
-		// This may not immediately cause the sync process to terminate,
-		// but when it eventually terminates, syncer.Run will return `err == context.Canceled`.
-		cancelSync()
+		chainClient.Stop()
 
 		// When sync terminates and syncer.Run returns `err == context.Canceled`,
 		// we will get notified on this channel.
@@ -290,13 +290,74 @@ func (mw *MultiWallet) CancelSync() {
 		log.Info("Sync fully canceled.")
 	}
 
-	for _, libWallet := range mw.wallets {
-		loadedWallet, walletLoaded := libWallet.loader.LoadedWallet()
-		if !walletLoaded {
-			continue
+	mw.setNetworkBackend(nil)
+}
+
+func (mw *MultiWallet) resetSyncData() {
+
+	mw.syncData.mu.Lock()
+	mw.syncData.syncing = false
+	mw.syncData.synced = false
+	mw.syncData.cancelSync = nil
+	mw.syncData.syncCanceled = nil
+	mw.syncData.activeSyncData = nil
+	mw.syncData.mu.Unlock()
+
+	for _, wallet := range mw.wallets {
+		wallet.waiting = true
+		wallet.LockWallet() // lock wallet if previously unlocked to perform account discovery.
+	}
+}
+
+func (mw *MultiWallet) synced(walletID int, synced bool) {
+	mw.syncData.mu.RLock()
+	allWalletsSynced := mw.syncData.synced
+	mw.syncData.mu.RUnlock()
+
+	if allWalletsSynced && synced {
+		return
+	}
+
+	wallet := mw.wallets[walletID]
+	wallet.synced = synced
+	wallet.syncing = false
+	mw.listenForTransactions(wallet.ID)
+
+	if !wallet.internal.Locked() {
+		wallet.LockWallet() // lock wallet if previously unlocked to perform account discovery.
+		err := mw.markWalletAsDiscoveredAccounts(walletID)
+		if err != nil {
+			log.Error(err)
+		}
+	}
+
+	if mw.OpenedWalletsCount() == mw.SyncedWalletsCount() {
+		mw.syncData.mu.Lock()
+		mw.syncData.syncing = false
+		mw.syncData.synced = true
+		mw.syncData.mu.Unlock()
+
+		// begin indexing transactions after sync is completed,
+		// syncProgressListeners.OnSynced() will be invoked after transactions are indexed
+		var txIndexing errgroup.Group
+		for _, wallet := range mw.wallets {
+			txIndexing.Go(wallet.IndexTransactions)
 		}
 
-		loadedWallet.SetNetworkBackend(nil)
+		go func() {
+			err := txIndexing.Wait()
+			if err != nil {
+				log.Errorf("Tx Index Error: %v", err)
+			}
+
+			for _, syncProgressListener := range mw.syncProgressListeners() {
+				if synced {
+					syncProgressListener.OnSyncCompleted()
+				} else {
+					syncProgressListener.OnSyncCanceled(false)
+				}
+			}
+		}()
 	}
 }
 
@@ -338,24 +399,6 @@ func (mw *MultiWallet) CurrentSyncStage() int32 {
 		return mw.syncData.syncStage
 	}
 	return InvalidSyncStage
-}
-
-func (mw *MultiWallet) GeneralSyncProgress() *GeneralSyncProgress {
-	mw.syncData.mu.RLock()
-	defer mw.syncData.mu.RUnlock()
-
-	if mw.syncData != nil && mw.syncData.syncing {
-		switch mw.syncData.syncStage {
-		case HeadersFetchSyncStage:
-			return mw.syncData.headersFetchProgress.GeneralSyncProgress
-		case AddressDiscoverySyncStage:
-			return mw.syncData.addressDiscoveryProgress.GeneralSyncProgress
-		case HeadersRescanSyncStage:
-			return mw.syncData.headersRescanProgress.GeneralSyncProgress
-		}
-	}
-
-	return nil
 }
 
 func (mw *MultiWallet) ConnectedPeers() int32 {
@@ -406,8 +449,8 @@ func (wallet *Wallet) GetBestBlock() int32 {
 		return 0
 	}
 
-	_, height := wallet.internal.MainChainTip(wallet.shutdownContext())
-	return height
+	blk := wallet.internal.Manager.SyncedTo()
+	return blk.Height
 }
 
 func (wallet *Wallet) GetBestBlockTimeStamp() int64 {
@@ -417,15 +460,8 @@ func (wallet *Wallet) GetBestBlockTimeStamp() int64 {
 		return 0
 	}
 
-	ctx := wallet.shutdownContext()
-	_, height := wallet.internal.MainChainTip(ctx)
-	identifier := w.NewBlockIdentifierFromHeight(height)
-	info, err := wallet.internal.BlockInfo(ctx, identifier)
-	if err != nil {
-		log.Error(err)
-		return 0
-	}
-	return info.Timestamp
+	blk := wallet.internal.Manager.SyncedTo()
+	return blk.Timestamp.UnixNano()
 }
 
 func (mw *MultiWallet) GetLowestBlockTimestamp() int64 {

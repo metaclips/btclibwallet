@@ -8,7 +8,4 @@ const (
 
 	TxTypeRegular        = "Regular"
 	TxTypeCoinBase       = "Coinbase"
-	TxTypeTicketPurchase = "Ticket"
-	TxTypeVote           = "Vote"
-	TxTypeRevocation     = "Revocation"
 )

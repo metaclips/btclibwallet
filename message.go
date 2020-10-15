@@ -1,12 +1,14 @@
 package dcrlibwallet
 
 import (
+	"bytes"
 	"time"
 
-	"github.com/decred/dcrd/dcrec"
-	"github.com/decred/dcrd/dcrutil/v2"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
 	"github.com/decred/dcrwallet/errors/v2"
-	w "github.com/decred/dcrwallet/wallet/v3"
 )
 
 func (wallet *Wallet) SignMessage(passphrase []byte, address string, message string) ([]byte, error) {
@@ -15,65 +17,71 @@ func (wallet *Wallet) SignMessage(passphrase []byte, address string, message str
 		lock <- time.Time{}
 	}()
 
-	ctx := wallet.shutdownContext()
-	err := wallet.internal.Unlock(ctx, passphrase, lock)
+	err := wallet.internal.Unlock(passphrase, lock)
 	if err != nil {
 		return nil, translateError(err)
 	}
 
-	addr, err := dcrutil.DecodeAddress(address, wallet.chainParams)
+	addr, err := btcutil.DecodeAddress(address, wallet.chainParams)
 	if err != nil {
 		return nil, translateError(err)
 	}
 
-	var sig []byte
-	switch a := addr.(type) {
-	case *dcrutil.AddressSecpPubKey:
-	case *dcrutil.AddressPubKeyHash:
-		if a.DSA() != dcrec.STEcdsaSecp256k1 {
-			return nil, errors.New(ErrInvalidAddress)
-		}
-	default:
-		return nil, errors.New(ErrInvalidAddress)
-	}
-
-	sig, err = wallet.internal.SignMessage(ctx, message, addr)
+	privKey, err := wallet.internal.PrivKeyForAddress(addr)
 	if err != nil {
-		return nil, translateError(err)
+		return nil, err
 	}
 
-	return sig, nil
+	var buf bytes.Buffer
+	wire.WriteVarString(&buf, 0, "Bitcoin Signed Message:\n")
+	wire.WriteVarString(&buf, 0, message)
+	messageHash := chainhash.DoubleHashB(buf.Bytes())
+
+	sigbytes, err := btcec.SignCompact(btcec.S256(), privKey,
+		messageHash, true)
+	if err != nil {
+		return nil, err
+	}
+
+	return sigbytes, nil
 }
 
 func (mw *MultiWallet) VerifyMessage(address string, message string, signatureBase64 string) (bool, error) {
-	var valid bool
-
-	addr, err := dcrutil.DecodeAddress(address, mw.chainParams)
+	addr, err := btcutil.DecodeAddress(address, mw.chainParams)
 	if err != nil {
 		return false, translateError(err)
 	}
 
-	signature, err := DecodeBase64(signatureBase64)
+	sig, err := DecodeBase64(signatureBase64)
 	if err != nil {
 		return false, err
 	}
 
-	// Addresses must have an associated secp256k1 private key and therefore
-	// must be P2PK or P2PKH (P2SH is not allowed).
-	switch a := addr.(type) {
-	case *dcrutil.AddressSecpPubKey:
-	case *dcrutil.AddressPubKeyHash:
-		if a.DSA() != dcrec.STEcdsaSecp256k1 {
-			return false, errors.New(ErrInvalidAddress)
-		}
-	default:
-		return false, errors.New(ErrInvalidAddress)
-	}
-
-	valid, err = w.VerifyMessage(message, addr, signature, mw.chainParams)
+	// Validate the signature - this just shows that it was valid at all.
+	// we will compare it with the key next.
+	var buf bytes.Buffer
+	wire.WriteVarString(&buf, 0, "Bitcoin Signed Message:\n")
+	wire.WriteVarString(&buf, 0, message)
+	expectedMessageHash := chainhash.DoubleHashB(buf.Bytes())
+	pk, wasCompressed, err := btcec.RecoverCompact(btcec.S256(), sig,
+		expectedMessageHash)
 	if err != nil {
-		return false, translateError(err)
+		return false, err
 	}
 
-	return valid, nil
+	var serializedPubKey []byte
+	if wasCompressed {
+		serializedPubKey = pk.SerializeCompressed()
+	} else {
+		serializedPubKey = pk.SerializeUncompressed()
+	}
+	// Verify that the signed-by address matches the given address
+	switch checkAddr := addr.(type) {
+	case *btcutil.AddressPubKeyHash: // ok
+		return bytes.Equal(btcutil.Hash160(serializedPubKey), checkAddr.Hash160()[:]), nil
+	case *btcutil.AddressPubKey: // ok
+		return string(serializedPubKey) == checkAddr.String(), nil
+	default:
+		return false, errors.New("address type not supported")
+	}
 }

@@ -19,7 +19,7 @@ func (mw *MultiWallet) listenForTransactions(walletID int) {
 					return
 				}
 				for _, transaction := range v.UnminedTransactions {
-					tempTransaction, err := wallet.decodeTransactionWithTxSummary(&transaction, nil)
+					tempTransaction, err := wallet.decodeTransactionWithTxSummary(transaction, -1)
 					if err != nil {
 						log.Errorf("[%d] Error ntfn parse tx: %v", wallet.ID, err)
 						return
@@ -44,9 +44,8 @@ func (mw *MultiWallet) listenForTransactions(walletID int) {
 				}
 
 				for _, block := range v.AttachedBlocks {
-					blockHash := block.Header.BlockHash()
 					for _, transaction := range block.Transactions {
-						tempTransaction, err := wallet.decodeTransactionWithTxSummary(&transaction, &blockHash)
+						tempTransaction, err := wallet.decodeTransactionWithTxSummary(transaction, block.Height)
 						if err != nil {
 							log.Errorf("[%d] Error ntfn parse tx: %v", wallet.ID, err)
 							return
@@ -57,10 +56,10 @@ func (mw *MultiWallet) listenForTransactions(walletID int) {
 							log.Errorf("[%d] Incoming block replace tx error :%v", wallet.ID, err)
 							return
 						}
-						mw.publishTransactionConfirmed(wallet.ID, transaction.Hash.String(), int32(block.Header.Height))
+						mw.publishTransactionConfirmed(wallet.ID, transaction.Hash.String(), int32(block.Height))
 					}
 
-					mw.publishBlockAttached(wallet.ID, int32(block.Header.Height))
+					mw.publishBlockAttached(wallet.ID, int32(block.Height))
 				}
 
 			case <-mw.syncData.syncCanceled:

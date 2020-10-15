@@ -6,19 +6,15 @@
 package dcrlibwallet
 
 import (
+	"fmt"
 	"os"
 
-	"github.com/decred/dcrd/addrmgr"
-	"github.com/decred/dcrd/connmgr/v2"
-	"github.com/decred/dcrwallet/errors"
-	"github.com/decred/dcrwallet/p2p/v2"
-	"github.com/decred/dcrwallet/ticketbuyer/v4"
-	"github.com/decred/dcrwallet/wallet/v3"
-	"github.com/decred/dcrwallet/wallet/v3/udb"
-	"github.com/decred/slog"
+	"github.com/btcsuite/btclog"
+	"github.com/btcsuite/btcwallet/chain"
+	"github.com/btcsuite/btcwallet/wallet"
+	"github.com/btcsuite/btcwallet/wtxmgr"
 	"github.com/jrick/logrotate/rotator"
-	"github.com/planetdecred/dcrlibwallet/internal/loader"
-	"github.com/planetdecred/dcrlibwallet/spv"
+	// "github.com/lightninglabs/neutrino"
 )
 
 // logWriter implements an io.Writer that outputs to both standard output and
@@ -43,46 +39,30 @@ var (
 	// backendLog is the logging backend used to create all subsystem loggers.
 	// The backend must not be used before the log rotator has been initialized,
 	// or data races and/or nil pointer dereferences will occur.
-	backendLog = slog.NewBackend(logWriter{})
+	backendLog = btclog.NewBackend(logWriter{})
 
 	// logRotator is one of the logging outputs.  It should be closed on
 	// application shutdown.
 	logRotator *rotator.Rotator
 
-	log          = backendLog.Logger("DLWL")
-	loaderLog    = backendLog.Logger("LODR")
-	walletLog    = backendLog.Logger("WLLT")
-	tkbyLog      = backendLog.Logger("TKBY")
-	syncLog      = backendLog.Logger("SYNC")
-	grpcLog      = backendLog.Logger("GRPC")
-	legacyRPCLog = backendLog.Logger("RPCS")
-	cmgrLog      = backendLog.Logger("CMGR")
-	amgrLog      = backendLog.Logger("AMGR")
+	log       = backendLog.Logger("DLWL")
+	walletLog = backendLog.Logger("WLLT")
+	txmgrLog  = backendLog.Logger("TMGR")
+	chainLog  = backendLog.Logger("CHNS")
+	btcnLog   = backendLog.Logger("BTCN")
 )
 
 // Initialize package-global logger variables.
 func init() {
-	loader.UseLogger(loaderLog)
 	wallet.UseLogger(walletLog)
-	udb.UseLogger(walletLog)
-	ticketbuyer.UseLogger(tkbyLog)
-	spv.UseLogger(syncLog)
-	p2p.UseLogger(syncLog)
-	connmgr.UseLogger(cmgrLog)
-	addrmgr.UseLogger(amgrLog)
+	wtxmgr.UseLogger(txmgrLog)
+	chain.UseLogger(chainLog)
+	// neutrino.UseLogger(btcnLog)
 }
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
-var subsystemLoggers = map[string]slog.Logger{
+var subsystemLoggers = map[string]btclog.Logger{
 	"DLWL": log,
-	"LODR": loaderLog,
-	"WLLT": walletLog,
-	"TKBY": tkbyLog,
-	"SYNC": syncLog,
-	"GRPC": grpcLog,
-	"RPCS": legacyRPCLog,
-	"CMGR": cmgrLog,
-	"AMGR": amgrLog,
 }
 
 // initLogRotator initializes the logging rotater to write logs to logFile and
@@ -91,7 +71,7 @@ var subsystemLoggers = map[string]slog.Logger{
 func initLogRotator(logFile string) error {
 	r, err := rotator.New(logFile, 10*1024, false, 3)
 	if err != nil {
-		return errors.Errorf("failed to create file rotator: %v", err)
+		return fmt.Errorf("failed to create file rotator: %v", err)
 	}
 
 	logRotator = r
@@ -99,13 +79,13 @@ func initLogRotator(logFile string) error {
 }
 
 // RegisterLogger should be called before logRotator is initialized.
-func RegisterLogger(tag string) (slog.Logger, error) {
+func RegisterLogger(tag string) (btclog.Logger, error) {
 	if logRotator != nil {
-		return nil, errors.E(ErrLogRotatorAlreadyInitialized)
+		return nil, fmt.Errorf(ErrLogRotatorAlreadyInitialized)
 	}
 
 	if _, exists := subsystemLoggers[tag]; exists {
-		return nil, errors.E(ErrLoggerAlreadyRegistered)
+		return nil, fmt.Errorf(ErrLoggerAlreadyRegistered)
 	}
 
 	logger := backendLog.Logger(tag)
@@ -115,7 +95,7 @@ func RegisterLogger(tag string) (slog.Logger, error) {
 }
 
 func SetLogLevels(logLevel string) {
-	_, ok := slog.LevelFromString(logLevel)
+	_, ok := btclog.LevelFromString(logLevel)
 	if !ok {
 		return
 	}
@@ -138,7 +118,7 @@ func setLogLevel(subsystemID string, logLevel string) {
 	}
 
 	// Defaults to info if the log level is invalid.
-	level, _ := slog.LevelFromString(logLevel)
+	level, _ := btclog.LevelFromString(logLevel)
 	logger.SetLevel(level)
 }
 

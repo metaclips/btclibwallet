@@ -2,12 +2,13 @@ package dcrlibwallet
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 
+	"github.com/c-ollins/btclibwallet/txhelper"
+	"github.com/c-ollins/btclibwallet/txindex"
 	"github.com/asdine/storm"
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	"github.com/planetdecred/dcrlibwallet/txhelper"
-	"github.com/planetdecred/dcrlibwallet/txindex"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 )
 
 const (
@@ -17,7 +18,6 @@ const (
 	TxFilterSent        = txindex.TxFilterSent
 	TxFilterReceived    = txindex.TxFilterReceived
 	TxFilterTransferred = txindex.TxFilterTransferred
-	TxFilterStaking     = txindex.TxFilterStaking
 	TxFilterCoinBase    = txindex.TxFilterCoinBase
 	TxFilterRegular     = txindex.TxFilterRegular
 
@@ -26,22 +26,9 @@ const (
 	TxDirectionReceived    = txhelper.TxDirectionReceived
 	TxDirectionTransferred = txhelper.TxDirectionTransferred
 
-	TxTypeRegular        = txhelper.TxTypeRegular
-	TxTypeCoinBase       = txhelper.TxTypeCoinBase
-	TxTypeTicketPurchase = txhelper.TxTypeTicketPurchase
-	TxTypeVote           = txhelper.TxTypeVote
-	TxTypeRevocation     = txhelper.TxTypeRevocation
+	TxTypeRegular  = txhelper.TxTypeRegular
+	TxTypeCoinBase = txhelper.TxTypeCoinBase
 )
-
-func (wallet *Wallet) PublishUnminedTransactions() error {
-	n, err := wallet.internal.NetworkBackend()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-
-	return wallet.internal.PublishUnminedTransactions(wallet.shutdownContext(), n)
-}
 
 func (wallet *Wallet) GetTransaction(txHash []byte) (string, error) {
 	transaction, err := wallet.GetTransactionRaw(txHash)
@@ -65,13 +52,16 @@ func (wallet *Wallet) GetTransactionRaw(txHash []byte) (*Transaction, error) {
 		return nil, err
 	}
 
-	txSummary, _, blockHash, err := wallet.internal.TransactionSummary(wallet.shutdownContext(), hash)
+	var tx Transaction
+	err = wallet.txDB.FindOne("Hash", hash.String(), &tx)
 	if err != nil {
-		log.Error(err)
-		return nil, err
+		if err == storm.ErrNotFound {
+			return nil, fmt.Errorf(ErrNotExist)
+		}
+		return nil, translateError(err)
 	}
 
-	return wallet.decodeTransactionWithTxSummary(txSummary, blockHash)
+	return &tx, nil
 }
 
 func (wallet *Wallet) GetTransactions(offset, limit, txFilter int32, newestFirst bool) (string, error) {
@@ -126,18 +116,6 @@ func (mw *MultiWallet) GetTransactions(offset, limit, txFilter int32, newestFirs
 
 func (wallet *Wallet) CountTransactions(txFilter int32) (int, error) {
 	return wallet.txDB.Count(txFilter, &Transaction{})
-}
-
-func (wallet *Wallet) TicketHasVotedOrRevoked(ticketHash string) (bool, error) {
-	err := wallet.txDB.FindOne("TicketSpentHash", ticketHash, &Transaction{})
-	if err != nil {
-		if err == storm.ErrNotFound {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return true, nil
 }
 
 func TxMatchesFilter(txType string, txDirection, txFilter int32) bool {

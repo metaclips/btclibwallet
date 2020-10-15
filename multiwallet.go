@@ -12,11 +12,11 @@ import (
 
 	"github.com/asdine/storm"
 	"github.com/asdine/storm/q"
-	"github.com/decred/dcrd/chaincfg/v2"
+	"github.com/btcsuite/btcd/chaincfg"
+	w "github.com/btcsuite/btcwallet/wallet"
+	"github.com/c-ollins/btclibwallet/txindex"
+	"github.com/c-ollins/btclibwallet/utils"
 	"github.com/decred/dcrwallet/errors/v2"
-	w "github.com/decred/dcrwallet/wallet/v3"
-	"github.com/planetdecred/dcrlibwallet/txindex"
-	"github.com/planetdecred/dcrlibwallet/utils"
 	bolt "go.etcd.io/bbolt"
 
 	"golang.org/x/crypto/bcrypt"
@@ -33,12 +33,9 @@ type MultiWallet struct {
 
 	notificationListenersMu         sync.RWMutex
 	txAndBlockNotificationListeners map[string]TxAndBlockNotificationListener
-	blocksRescanProgressListener    BlocksRescanProgressListener
 
 	shuttingDown chan bool
 	cancelFuncs  []context.CancelFunc
-
-	Politeia Politeia
 }
 
 func NewMultiWallet(rootDir, dbDriver, netType string) (*MultiWallet, error) {
@@ -87,7 +84,6 @@ func NewMultiWallet(rootDir, dbDriver, netType string) (*MultiWallet, error) {
 			syncProgressListeners: make(map[string]SyncProgressListener),
 		},
 		txAndBlockNotificationListeners: make(map[string]TxAndBlockNotificationListener),
-		Politeia:                        newPoliteia(),
 	}
 
 	// read saved wallets info from db and initialize wallets
@@ -123,7 +119,6 @@ func (mw *MultiWallet) Shutdown() {
 	// Trigger shuttingDown signal to cancel all contexts created with `shutdownContextWithCancel`.
 	mw.shuttingDown <- true
 
-	mw.CancelRescan()
 	mw.CancelSync()
 
 	for _, wallet := range mw.wallets {
@@ -258,22 +253,22 @@ func (mw *MultiWallet) AllWalletsAreWatchOnly() (bool, error) {
 	return true, nil
 }
 
-func (mw *MultiWallet) CreateWatchOnlyWallet(walletName, extendedPublicKey string) (*Wallet, error) {
-	wallet := &Wallet{
-		Name:                  walletName,
-		IsRestored:            true,
-		HasDiscoveredAccounts: true,
-	}
+// func (mw *MultiWallet) CreateWatchOnlyWallet(walletName, extendedPublicKey string) (*Wallet, error) {
+// 	wallet := &Wallet{
+// 		Name:                  walletName,
+// 		IsRestored:            true,
+// 		HasDiscoveredAccounts: true,
+// 	}
 
-	return mw.saveNewWallet(wallet, func() error {
-		err := wallet.prepare(mw.rootDir, mw.chainParams, mw.walletConfigSetFn(wallet.ID), mw.walletConfigReadFn(wallet.ID))
-		if err != nil {
-			return err
-		}
+// 	return mw.saveNewWallet(wallet, func() error {
+// 		err := wallet.prepare(mw.rootDir, mw.chainParams, mw.walletConfigSetFn(wallet.ID), mw.walletConfigReadFn(wallet.ID))
+// 		if err != nil {
+// 			return err
+// 		}
 
-		return wallet.createWatchingOnlyWallet(extendedPublicKey)
-	})
-}
+// 		return wallet.createWatchingOnlyWallet(extendedPublicKey)
+// 	})
+// }
 
 func (mw *MultiWallet) CreateNewWallet(walletName, privatePassphrase string, privatePassphraseType int32) (*Wallet, error) {
 	seed, err := GenerateSeed()
@@ -368,7 +363,7 @@ func (mw *MultiWallet) LinkExistingWallet(walletName, walletDataDir, originalPub
 			}
 
 			err = mw.loadWalletTemporarily(ctx, wallet.dataDir, originalPubPass, func(tempWallet *w.Wallet) error {
-				return tempWallet.ChangePublicPassphrase(ctx, []byte(originalPubPass), []byte(w.InsecurePubPassphrase))
+				return tempWallet.ChangePublicPassphrase([]byte(originalPubPass), []byte(w.InsecurePubPassphrase))
 			})
 			if err != nil {
 				return err
@@ -440,7 +435,6 @@ func (mw *MultiWallet) saveNewWallet(wallet *Wallet, setupWallet func() error) (
 			wallet.Name = "wallet-" + strconv.Itoa(wallet.ID) // wallet-#
 		}
 		wallet.dataDir = walletDataDir
-		wallet.DbDriver = mw.dbDriver
 
 		err = db.Save(wallet) // update database with complete wallet information
 		if err != nil {

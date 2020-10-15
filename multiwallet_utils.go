@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 
 	"github.com/asdine/storm"
+	"github.com/btcsuite/btcwallet/chain"
+	w "github.com/btcsuite/btcwallet/wallet"
 	"github.com/decred/dcrwallet/errors/v2"
-	w "github.com/decred/dcrwallet/wallet/v3"
 	"github.com/kevinburke/nacl"
 	"github.com/kevinburke/nacl/secretbox"
-	"github.com/planetdecred/dcrlibwallet/spv"
 	"golang.org/x/crypto/scrypt"
 )
 
@@ -53,10 +53,10 @@ func (mw *MultiWallet) loadWalletTemporarily(ctx context.Context, walletDataDir,
 	}
 
 	// initialize the wallet loader
-	walletLoader := initWalletLoader(mw.chainParams, walletDataDir, mw.dbDriver)
+	walletLoader := initWalletLoader(mw.chainParams, walletDataDir)
 
 	// open the wallet to get ready for temporary use
-	wallet, err := walletLoader.OpenExistingWallet(ctx, []byte(walletPublicPass))
+	wallet, err := walletLoader.OpenExistingWallet([]byte(walletPublicPass), false)
 	if err != nil {
 		return translateError(err)
 	}
@@ -87,14 +87,18 @@ func (mw *MultiWallet) markWalletAsDiscoveredAccounts(walletID int) error {
 	return nil
 }
 
-func (mw *MultiWallet) setNetworkBackend(syncer *spv.Syncer) {
-	for walletID, wallet := range mw.wallets {
+func (mw *MultiWallet) setNetworkBackend(chainClient chain.Interface) {
+	for _, wallet := range mw.wallets {
 		if wallet.WalletOpened() {
-			walletBackend := &spv.WalletBackend{
-				Syncer:   syncer,
-				WalletID: walletID,
+			wallet.internal.SynchronizeRPC(chainClient)
+
+			if chainClient == nil {
+				wallet.internal.SetChainSynced(false)
+
+				wallet.internal.Stop()
+				wallet.internal.WaitForShutdown()
+				wallet.internal.Start()
 			}
-			wallet.internal.SetNetworkBackend(walletBackend)
 		}
 	}
 }

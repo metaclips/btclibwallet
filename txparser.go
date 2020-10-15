@@ -3,25 +3,12 @@ package dcrlibwallet
 import (
 	"fmt"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
-	w "github.com/decred/dcrwallet/wallet/v3"
+	w "github.com/btcsuite/btcwallet/wallet"
 )
 
 const BlockHeightInvalid int32 = -1
 
-func (wallet *Wallet) decodeTransactionWithTxSummary(txSummary *w.TransactionSummary,
-	blockHash *chainhash.Hash) (*Transaction, error) {
-
-	var blockHeight int32 = BlockHeightInvalid
-	if blockHash != nil {
-		blockIdentifier := w.NewBlockIdentifierFromHash(blockHash)
-		blockInfo, err := wallet.internal.BlockInfo(wallet.shutdownContext(), blockIdentifier)
-		if err != nil {
-			log.Error(err)
-		} else {
-			blockHeight = blockInfo.Height
-		}
-	}
+func (wallet *Wallet) decodeTransactionWithTxSummary(txSummary w.TransactionSummary, blockHeight int32) (*Transaction, error) {
 
 	walletInputs := make([]*WalletInput, len(txSummary.MyInputs))
 	for i, input := range txSummary.MyInputs {
@@ -40,10 +27,9 @@ func (wallet *Wallet) decodeTransactionWithTxSummary(txSummary *w.TransactionSum
 	for i, output := range txSummary.MyOutputs {
 		accountNumber := int32(output.Account)
 		walletOutputs[i] = &WalletOutput{
-			Index:     int32(output.Index),
-			AmountOut: int64(output.Amount),
-			Internal:  output.Internal,
-			Address:   output.Address.Address(),
+			Index: int32(output.Index),
+			// Amount & Address is added in DecodeTransaction
+			Internal: output.Internal,
 			WalletAccount: &WalletAccount{
 				AccountNumber: accountNumber,
 				AccountName:   wallet.AccountName(accountNumber),
@@ -54,6 +40,7 @@ func (wallet *Wallet) decodeTransactionWithTxSummary(txSummary *w.TransactionSum
 	walletTx := &TxInfoFromWallet{
 		WalletID:    wallet.ID,
 		BlockHeight: blockHeight,
+		Fee:         int64(txSummary.Fee),
 		Timestamp:   txSummary.Timestamp,
 		Hex:         fmt.Sprintf("%x", txSummary.Transaction),
 		Inputs:      walletInputs,
@@ -63,39 +50,6 @@ func (wallet *Wallet) decodeTransactionWithTxSummary(txSummary *w.TransactionSum
 	decodedTx, err := DecodeTransaction(walletTx, wallet.chainParams)
 	if err != nil {
 		return nil, err
-	}
-
-	if decodedTx.TicketSpentHash != "" {
-		hash, err := chainhash.NewHashFromStr(decodedTx.TicketSpentHash)
-		if err != nil {
-			return nil, err
-		}
-
-		ticketPurchaseTx, err := wallet.GetTransactionRaw(hash[:])
-		if err != nil {
-			return nil, err
-		}
-
-		timeDifferenceInSeconds := decodedTx.Timestamp - ticketPurchaseTx.Timestamp
-		decodedTx.DaysToVoteOrRevoke = int32(timeDifferenceInSeconds / 86400) // seconds to days conversion
-
-		// calculate reward
-		var ticketInvestment int64
-		for _, input := range ticketPurchaseTx.Inputs {
-			if input.AccountNumber > -1 {
-				ticketInvestment += input.Amount
-			}
-		}
-
-		var ticketOutput int64
-		for _, output := range walletTx.Outputs {
-			if output.AccountNumber > -1 {
-				ticketOutput += output.AmountOut
-			}
-		}
-
-		reward := ticketOutput - ticketInvestment
-		decodedTx.VoteReward = reward
 	}
 
 	return decodedTx, nil

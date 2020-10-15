@@ -1,23 +1,32 @@
 package txhelper
 
 import (
+	"encoding/hex"
 	"math"
+	"strings"
 
-	"github.com/decred/dcrd/dcrutil/v2"
-	"github.com/decred/dcrd/wire"
-	"github.com/decred/dcrdata/txhelpers"
-	"github.com/decred/dcrwallet/wallet/v3"
+	"github.com/btcsuite/btcd/wire"
 )
 
-func MsgTxFeeSizeRate(transactionHex string) (msgTx *wire.MsgTx, fee dcrutil.Amount, size int, feeRate dcrutil.Amount, err error) {
-	msgTx, err = txhelpers.MsgTxFromHex(transactionHex)
-	if err != nil {
+func MsgTxSize(transactionHex string) (msgTx *wire.MsgTx, size int, err error) {
+	msgTx = wire.NewMsgTx(wire.TxVersion)
+	if err = msgTx.Deserialize(hex.NewDecoder(strings.NewReader(transactionHex))); err != nil {
 		return
 	}
 
 	size = msgTx.SerializeSize()
-	fee, feeRate = txhelpers.TxFeeRate(msgTx)
 	return
+}
+
+// FeeRate computes the fee rate in atoms/kB for a transaction provided the
+// total amount of the transaction's inputs, the total amount of the
+// transaction's outputs, and the size of the transaction in bytes. Note that a
+// kB refers to 1000 bytes, not a kiB. If the size is 0, the returned fee is -1.
+func FeeRate(amtIn, amtOut, sizeBytes int64) int64 {
+	if sizeBytes == 0 {
+		return -1
+	}
+	return 1000 * (amtIn - amtOut) / sizeBytes
 }
 
 func TransactionAmountAndDirection(inputTotal, outputTotal, fee int64) (amount int64, direction int32) {
@@ -40,16 +49,10 @@ func TransactionAmountAndDirection(inputTotal, outputTotal, fee int64) (amount i
 	return
 }
 
-func FormatTransactionType(txType wallet.TransactionType) string {
-	switch txType {
-	case wallet.TransactionTypeCoinbase:
+func FormatTransactionType(isGenerated bool) string {
+	switch isGenerated {
+	case true:
 		return TxTypeCoinBase
-	case wallet.TransactionTypeTicketPurchase:
-		return TxTypeTicketPurchase
-	case wallet.TransactionTypeVote:
-		return TxTypeVote
-	case wallet.TransactionTypeRevocation:
-		return TxTypeRevocation
 	default:
 		return TxTypeRegular
 	}

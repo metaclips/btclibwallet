@@ -1,7 +1,5 @@
 package dcrlibwallet
 
-import "github.com/decred/dcrwallet/wallet/v3"
-
 type WalletsIterator struct {
 	currentIndex int
 	wallets      []*Wallet
@@ -14,7 +12,7 @@ type BlockInfo struct {
 
 type Amount struct {
 	AtomValue int64
-	DcrValue  float64
+	BtcValue  float64
 }
 
 type TxFeeAndSize struct {
@@ -31,13 +29,9 @@ type UnsignedTransaction struct {
 }
 
 type Balance struct {
-	Total                   int64
-	Spendable               int64
-	ImmatureReward          int64
-	ImmatureStakeGeneration int64
-	LockedByTickets         int64
-	VotingAuthority         int64
-	UnConfirmed             int64
+	Total          int64
+	Spendable      int64
+	ImmatureReward int64
 }
 
 type Account struct {
@@ -68,13 +62,10 @@ type Accounts struct {
 type SyncProgressListener interface {
 	OnSyncStarted(wasRestarted bool)
 	OnPeerConnectedOrDisconnected(numberOfConnectedPeers int32)
-	OnHeadersFetchProgress(headersFetchProgress *HeadersFetchProgressReport)
-	OnAddressDiscoveryProgress(addressDiscoveryProgress *AddressDiscoveryProgressReport)
-	OnHeadersRescanProgress(headersRescanProgress *HeadersRescanProgressReport)
+	OnCFiltersFetchProgress(cFiltersFetchProgress *CFiltersFetchProgressReport)
 	OnSyncCompleted()
 	OnSyncCanceled(willRestart bool)
 	OnSyncEndedWithError(err error)
-	Debug(debugInfo *DebugInfo)
 }
 
 type GeneralSyncProgress struct {
@@ -82,34 +73,11 @@ type GeneralSyncProgress struct {
 	TotalTimeRemainingSeconds int64 `json:"totalTimeRemainingSeconds"`
 }
 
-type HeadersFetchProgressReport struct {
+type CFiltersFetchProgressReport struct {
 	*GeneralSyncProgress
-	TotalHeadersToFetch    int32 `json:"totalHeadersToFetch"`
-	CurrentHeaderHeight    int32 `json:"currentHeaderHeight"`
-	CurrentHeaderTimestamp int64 `json:"currentHeaderTimestamp"`
-	HeadersFetchProgress   int32 `json:"headersFetchProgress"`
-}
-
-type AddressDiscoveryProgressReport struct {
-	*GeneralSyncProgress
-	AddressDiscoveryProgress int32 `json:"addressDiscoveryProgress"`
-	WalletID                 int   `json:"walletID"`
-}
-
-type HeadersRescanProgressReport struct {
-	*GeneralSyncProgress
-	TotalHeadersToScan  int32 `json:"totalHeadersToScan"`
-	CurrentRescanHeight int32 `json:"currentRescanHeight"`
-	RescanProgress      int32 `json:"rescanProgress"`
-	RescanTimeRemaining int64 `json:"rescanTimeRemaining"`
-	WalletID            int   `json:"walletID"`
-}
-
-type DebugInfo struct {
-	TotalTimeElapsed          int64
-	TotalTimeRemaining        int64
-	CurrentStageTimeElapsed   int64
-	CurrentStageTimeRemaining int64
+	FetchedCfiltlers      int32
+	TotalCFitlersToFetch  int32
+	LastCFiltersTimestamp int64
 }
 
 /** end sync-related types */
@@ -120,12 +88,6 @@ type TxAndBlockNotificationListener interface {
 	OnTransaction(transaction string)
 	OnBlockAttached(walletID int, blockHeight int32)
 	OnTransactionConfirmed(walletID int, hash string, blockHeight int32)
-}
-
-type BlocksRescanProgressListener interface {
-	OnBlocksRescanStarted(walletID int)
-	OnBlocksRescanProgress(*HeadersRescanProgressReport)
-	OnBlocksRescanEnded(walletID int, err error)
 }
 
 // Transaction is used with storm for tx indexing operations.
@@ -140,23 +102,13 @@ type Transaction struct {
 
 	Version  int32 `json:"version"`
 	LockTime int32 `json:"lock_time"`
-	Expiry   int32 `json:"expiry"`
 	Fee      int64 `json:"fee"`
-	FeeRate  int64 `json:"fee_rate"`
 	Size     int   `json:"size"`
 
 	Direction int32       `storm:"index" json:"direction"`
 	Amount    int64       `json:"amount"`
 	Inputs    []*TxInput  `json:"inputs"`
 	Outputs   []*TxOutput `json:"outputs"`
-
-	// Vote Info
-	VoteVersion        int32  `json:"vote_version"`
-	LastBlockValid     bool   `json:"last_block_valid"`
-	VoteBits           string `json:"vote_bits"`
-	VoteReward         int64  `json:"vote_reward"`
-	TicketSpentHash    string `storm:"unique" json:"ticket_spent_hash"`
-	DaysToVoteOrRevoke int32  `json:"days_to_vote_revoke"`
 }
 
 type TxInput struct {
@@ -171,7 +123,6 @@ type TxInput struct {
 type TxOutput struct {
 	Index         int32  `json:"index"`
 	Amount        int64  `json:"amount"`
-	Version       int32  `json:"version"`
 	ScriptType    string `json:"script_type"`
 	Address       string `json:"address"`
 	Internal      bool   `json:"internal"`
@@ -184,6 +135,7 @@ type TxOutput struct {
 type TxInfoFromWallet struct {
 	WalletID    int
 	Hex         string
+	Fee         int64
 	Timestamp   int64
 	BlockHeight int32
 	Inputs      []*WalletInput
@@ -216,96 +168,3 @@ type TransactionDestination struct {
 }
 
 /** end tx-related types */
-
-/** begin ticket-related types */
-
-type PurchaseTicketsRequest struct {
-	Account               uint32
-	RequiredConfirmations uint32
-	NumTickets            uint32
-	Passphrase            []byte
-	Expiry                uint32
-	TxFee                 int64
-	TicketAddress         string
-	PoolAddress           string
-	PoolFees              float64
-	TicketFee             int64
-}
-
-type GetTicketsRequest struct {
-	StartingBlockHash   []byte
-	StartingBlockHeight int32
-	EndingBlockHash     []byte
-	EndingBlockHeight   int32
-	TargetTicketCount   int32
-}
-
-type TicketInfo struct {
-	BlockHeight int32
-	Status      string
-	Ticket      *wallet.TransactionSummary
-	Spender     *wallet.TransactionSummary
-}
-
-type TicketPriceResponse struct {
-	TicketPrice int64
-	Height      int32
-}
-
-type VSPTicketPurchaseInfo struct {
-	PoolAddress   string
-	PoolFees      float64
-	Script        string
-	TicketAddress string
-}
-
-/** end ticket-related types */
-
-/** begin politea proposal types */
-type ServerVersion struct {
-	Version int `json:"version"`
-}
-
-type ServerPolicy struct {
-	ProposalListPageSize int `json:"proposallistpagesize"`
-}
-
-type ProposalFile struct {
-	Name    string `json:"name"`
-	Mime    string `json:"mime"`
-	Digest  string `json:"digest"`
-	Payload string `json:"payload"`
-}
-
-type ProposalMetaData struct {
-	Name   string `json:"name"`
-	LinkTo string `json:"linkto"`
-	LinkBy int64  `json:"linkby"`
-}
-
-type ProposalCensorshipRecord struct {
-	Token     string `json:"token"`
-	Merkle    string `json:"merkle"`
-	Signature string `json:"signature"`
-}
-
-type Proposal struct {
-	Name             string                   `json:"name"`
-	State            int                      `json:"state"`
-	Status           int                      `json:"status"`
-	Timestamp        int64                    `json:"timestamp"`
-	UserID           string                   `json:"userid"`
-	Username         string                   `json:"username"`
-	PublicKey        string                   `json:"publickey"`
-	Signature        string                   `json:"signature"`
-	NumComments      int                      `json:"numcomments"`
-	Version          string                   `json:"version"`
-	PublishedAt      int64                    `json:"publishedat"`
-	Files            []ProposalFile           `json:"files"`
-	MetaData         []ProposalMetaData       `json:"metadata"`
-	CensorshipRecord ProposalCensorshipRecord `json:"censorshiprecord"`
-}
-
-type Proposals struct {
-	Proposals []Proposal `json:"proposals"`
-}

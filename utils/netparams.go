@@ -1,15 +1,15 @@
 package utils
 
 import (
+	"errors"
 	"strings"
 
-	"github.com/decred/dcrd/chaincfg/v2"
-	"github.com/decred/dcrwallet/errors"
+	"github.com/btcsuite/btcd/chaincfg"
 )
 
 var (
-	mainnetParams = chaincfg.MainNetParams()
-	testnetParams = chaincfg.TestNet3Params()
+	mainnetParams = &chaincfg.MainNetParams
+	testnetParams = &chaincfg.TestNet3Params
 )
 
 func ChainParams(netType string) (*chaincfg.Params, error) {

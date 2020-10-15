@@ -2,25 +2,24 @@ package dcrlibwallet
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
-	"github.com/decred/dcrd/chaincfg/v2"
+	"github.com/btcsuite/btcd/chaincfg"
+	w "github.com/btcsuite/btcwallet/wallet"
+	_ "github.com/btcsuite/btcwallet/walletdb/bdb" // init bdb
+	"github.com/c-ollins/btclibwallet/txindex"
 	"github.com/decred/dcrwallet/errors/v2"
-	w "github.com/decred/dcrwallet/wallet/v3"
-	"github.com/decred/dcrwallet/walletseed"
-	"github.com/planetdecred/dcrlibwallet/internal/loader"
-	"github.com/planetdecred/dcrlibwallet/txindex"
 )
 
 type Wallet struct {
 	ID                    int       `storm:"id,increment"`
 	Name                  string    `storm:"unique"`
 	CreatedAt             time.Time `storm:"index"`
-	DbDriver              string
 	EncryptedSeed         []byte
 	IsRestored            bool
 	HasDiscoveredAccounts bool
@@ -29,7 +28,7 @@ type Wallet struct {
 	internal    *w.Wallet
 	chainParams *chaincfg.Params
 	dataDir     string
-	loader      *loader.Loader
+	loader      *w.Loader
 	txDB        *txindex.DB
 
 	synced  bool
@@ -71,7 +70,7 @@ func (wallet *Wallet) prepare(rootDir string, chainParams *chaincfg.Params,
 	}
 
 	// init loader
-	wallet.loader = initWalletLoader(wallet.chainParams, wallet.dataDir, wallet.DbDriver)
+	wallet.loader = initWalletLoader(wallet.chainParams, wallet.dataDir)
 
 	// init cancelFuncs slice to hold cancel functions for long running
 	// operations and start go routine to listen for shutdown signal
@@ -129,21 +128,21 @@ func (wallet *Wallet) WalletExists() (bool, error) {
 	return wallet.loader.WalletExists()
 }
 
-func (wallet *Wallet) createWallet(privatePassphrase, seedMnemonic string) error {
+func (wallet *Wallet) createWallet(privatePassphrase, seedHex string) error {
 	log.Info("Creating Wallet")
-	if len(seedMnemonic) == 0 {
+	if len(seedHex) == 0 {
 		return errors.New(ErrEmptySeed)
 	}
 
 	pubPass := []byte(w.InsecurePubPassphrase)
 	privPass := []byte(privatePassphrase)
-	seed, err := walletseed.DecodeUserInput(seedMnemonic)
+	seed, err := hex.DecodeString(seedHex)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
-	createdWallet, err := wallet.loader.CreateNewWallet(wallet.shutdownContext(), pubPass, privPass, seed)
+	createdWallet, err := wallet.loader.CreateNewWallet(pubPass, privPass, seed, time.Now())
 	if err != nil {
 		log.Error(err)
 		return err
@@ -155,24 +154,24 @@ func (wallet *Wallet) createWallet(privatePassphrase, seedMnemonic string) error
 	return nil
 }
 
-func (wallet *Wallet) createWatchingOnlyWallet(extendedPublicKey string) error {
-	pubPass := []byte(w.InsecurePubPassphrase)
+// func (wallet *Wallet) createWatchingOnlyWallet(extendedPublicKey string) error {
+// 	pubPass := []byte(w.InsecurePubPassphrase)
 
-	createdWallet, err := wallet.loader.CreateWatchingOnlyWallet(wallet.shutdownContext(), extendedPublicKey, pubPass)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
+// 	createdWallet, err := wallet.loader.CreateWatchingOnlyWallet(wallet.shutdownContext(), extendedPublicKey, pubPass)
+// 	if err != nil {
+// 		log.Error(err)
+// 		return err
+// 	}
 
-	wallet.internal = createdWallet
+// 	wallet.internal = createdWallet
 
-	log.Info("Created Watching Only Wallet")
-	return nil
-}
+// 	log.Info("Created Watching Only Wallet")
+// 	return nil
+// }
 
 func (wallet *Wallet) IsWatchingOnlyWallet() bool {
 	if w, ok := wallet.loader.LoadedWallet(); ok {
-		return w.Manager.WatchingOnly()
+		return w.Manager.WatchOnly()
 	}
 
 	return false
@@ -181,7 +180,7 @@ func (wallet *Wallet) IsWatchingOnlyWallet() bool {
 func (wallet *Wallet) openWallet() error {
 	pubPass := []byte(w.InsecurePubPassphrase)
 
-	openedWallet, err := wallet.loader.OpenExistingWallet(wallet.shutdownContext(), pubPass)
+	openedWallet, err := wallet.loader.OpenExistingWallet(pubPass, false)
 	if err != nil {
 		log.Error(err)
 		return translateError(err)
@@ -208,8 +207,7 @@ func (wallet *Wallet) UnlockWallet(privPass []byte) error {
 		}
 	}()
 
-	ctx, _ := wallet.shutdownContextWithCancel()
-	err := loadedWallet.Unlock(ctx, privPass, nil)
+	err := loadedWallet.Unlock(privPass, nil)
 	if err != nil {
 		return translateError(err)
 	}
@@ -238,7 +236,7 @@ func (wallet *Wallet) changePrivatePassphrase(oldPass []byte, newPass []byte) er
 		}
 	}()
 
-	err := wallet.internal.ChangePrivatePassphrase(wallet.shutdownContext(), oldPass, newPass)
+	err := wallet.internal.ChangePrivatePassphrase(oldPass, newPass)
 	if err != nil {
 		return translateError(err)
 	}
@@ -257,7 +255,7 @@ func (wallet *Wallet) deleteWallet(privatePassphrase []byte) error {
 	}
 
 	if !wallet.IsWatchingOnlyWallet() {
-		err := wallet.internal.Unlock(wallet.shutdownContext(), privatePassphrase, nil)
+		err := wallet.internal.Unlock(privatePassphrase, nil)
 		if err != nil {
 			return translateError(err)
 		}

@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/decred/dcrd/dcrutil/v2"
-	"github.com/decred/dcrd/txscript/v2"
-	"github.com/decred/dcrd/wire"
+	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
+	"github.com/btcsuite/btcwallet/waddrmgr"
+	"github.com/btcsuite/btcwallet/wallet/txauthor"
+	"github.com/btcsuite/btcwallet/wallet/txrules"
+	"github.com/btcsuite/btcwallet/wallet/txsizes"
 	"github.com/decred/dcrwallet/errors/v2"
-	w "github.com/decred/dcrwallet/wallet/v3"
-	"github.com/decred/dcrwallet/wallet/v3/txauthor"
-	"github.com/decred/dcrwallet/wallet/v3/txrules"
-	"github.com/planetdecred/dcrlibwallet/txhelper"
+	"github.com/c-ollins/btclibwallet/txhelper"
 )
 
 type TxAuthor struct {
@@ -32,7 +33,7 @@ func (mw *MultiWallet) NewUnsignedTx(sourceWallet *Wallet, sourceAccountNumber i
 }
 
 func (tx *TxAuthor) AddSendDestination(address string, atomAmount int64, sendMax bool) error {
-	_, err := dcrutil.DecodeAddress(address, tx.sourceWallet.chainParams)
+	_, err := btcutil.DecodeAddress(address, tx.sourceWallet.chainParams)
 	if err != nil {
 		return translateError(err)
 	}
@@ -72,24 +73,26 @@ func (tx *TxAuthor) TotalSendAmount() *Amount {
 
 	return &Amount{
 		AtomValue: totalSendAmountAtom,
-		DcrValue:  dcrutil.Amount(totalSendAmountAtom).ToCoin(),
+		BtcValue:  btcutil.Amount(totalSendAmountAtom).ToBTC(),
 	}
 }
 
 func (tx *TxAuthor) EstimateFeeAndSize() (*TxFeeAndSize, error) {
-	unsignedTx, err := tx.constructTransaction()
+	unsignedTx, err := tx.constructTransaction(true)
 	if err != nil {
 		return nil, translateError(err)
 	}
 
-	feeToSendTx := txrules.FeeForSerializeSize(txrules.DefaultRelayFeePerKb, unsignedTx.EstimatedSignedSerializeSize)
+	maxSignedSize := txsizes.EstimateSerializeSize(len(unsignedTx.PrevScripts), unsignedTx.Tx.TxOut, unsignedTx.ChangeIndex >= 0)
+
+	feeToSendTx := txrules.FeeForSerializeSize(txrules.DefaultRelayFeePerKb, maxSignedSize)
 	feeAmount := &Amount{
 		AtomValue: int64(feeToSendTx),
-		DcrValue:  feeToSendTx.ToCoin(),
+		BtcValue:  feeToSendTx.ToBTC(),
 	}
 
 	return &TxFeeAndSize{
-		EstimatedSignedSize: unsignedTx.EstimatedSignedSerializeSize,
+		EstimatedSignedSize: maxSignedSize,
 		Fee:                 feeAmount,
 	}, nil
 }
@@ -109,7 +112,7 @@ func (tx *TxAuthor) EstimateMaxSendAmount() (*Amount, error) {
 
 	return &Amount{
 		AtomValue: maxSendableAmount,
-		DcrValue:  dcrutil.Amount(maxSendableAmount).ToCoin(),
+		BtcValue:  btcutil.Amount(maxSendableAmount).ToBTC(),
 	}, nil
 }
 
@@ -120,13 +123,12 @@ func (tx *TxAuthor) Broadcast(privatePassphrase []byte) ([]byte, error) {
 		}
 	}()
 
-	n, err := tx.sourceWallet.internal.NetworkBackend()
-	if err != nil {
-		log.Error(err)
-		return nil, err
+	chainClient := tx.sourceWallet.internal.ChainClient()
+	if chainClient == nil {
+		return nil, fmt.Errorf("chain client is nil")
 	}
 
-	unsignedTx, err := tx.constructTransaction()
+	unsignedTx, err := tx.constructTransaction(false)
 	if err != nil {
 		return nil, translateError(err)
 	}
@@ -156,8 +158,7 @@ func (tx *TxAuthor) Broadcast(privatePassphrase []byte) ([]byte, error) {
 		lock <- time.Time{}
 	}()
 
-	ctx := tx.sourceWallet.shutdownContext()
-	err = tx.sourceWallet.internal.Unlock(ctx, privatePassphrase, lock)
+	err = tx.sourceWallet.internal.Unlock(privatePassphrase, lock)
 	if err != nil {
 		log.Error(err)
 		return nil, errors.New(ErrInvalidPassphrase)
@@ -165,7 +166,7 @@ func (tx *TxAuthor) Broadcast(privatePassphrase []byte) ([]byte, error) {
 
 	var additionalPkScripts map[wire.OutPoint][]byte
 
-	invalidSigs, err := tx.sourceWallet.internal.SignTransaction(ctx, &msgTx, txscript.SigHashAll, additionalPkScripts, nil, nil)
+	invalidSigs, err := tx.sourceWallet.internal.SignTransaction(&msgTx, txscript.SigHashAll, additionalPkScripts, nil, nil)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -191,17 +192,18 @@ func (tx *TxAuthor) Broadcast(privatePassphrase []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	txHash, err := tx.sourceWallet.internal.PublishTransaction(ctx, &msgTx, serializedTransaction.Bytes(), n)
+	err = tx.sourceWallet.internal.PublishTransaction(&msgTx)
 	if err != nil {
 		return nil, translateError(err)
 	}
+
+	txHash := msgTx.TxHash()
 	return txHash[:], nil
 }
 
-func (tx *TxAuthor) constructTransaction() (*txauthor.AuthoredTx, error) {
+func (tx *TxAuthor) constructTransaction(dryRun bool) (*txauthor.AuthoredTx, error) {
 	var err error
 	var outputs = make([]*wire.TxOut, 0)
-	var outputSelectionAlgorithm w.OutputSelectionAlgorithm = w.OutputSelectionAlgorithmDefault
 	var changeSource txauthor.ChangeSource
 
 	ctx := tx.sourceWallet.shutdownContext()
@@ -218,15 +220,8 @@ func (tx *TxAuthor) constructTransaction() (*txauthor.AuthoredTx, error) {
 		}
 
 		if destination.SendMax {
-			// This is a send max destination, set output selection algo to all.
-			outputSelectionAlgorithm = w.OutputSelectionAlgorithmAll
-
 			// Use this destination address to make a changeSource rather than a tx output.
-			changeSource, err = txhelper.MakeTxChangeSource(destination.Address, tx.sourceWallet.chainParams)
-			if err != nil {
-				log.Errorf("constructTransaction: error preparing change source: %v", err)
-				return nil, fmt.Errorf("max amount change source error: %v", err)
-			}
+			changeSource = txhelper.MakeTxChangeSource(destination.Address, tx.sourceWallet.chainParams)
 		} else {
 			output, err := txhelper.MakeTxOutput(destination.Address, destination.AtomAmount, tx.sourceWallet.chainParams)
 			if err != nil {
@@ -253,17 +248,16 @@ func (tx *TxAuthor) constructTransaction() (*txauthor.AuthoredTx, error) {
 	}
 
 	requiredConfirmations := tx.sourceWallet.RequiredConfirmations()
-	return tx.sourceWallet.internal.NewUnsignedTransaction(ctx, outputs, txrules.DefaultRelayFeePerKb, tx.sourceAccountNumber,
-		requiredConfirmations, outputSelectionAlgorithm, changeSource)
+	return tx.sourceWallet.internal.CreateSimpleTx(tx.sourceAccountNumber, outputs, requiredConfirmations, txrules.DefaultRelayFeePerKb, dryRun)
 }
 
 // changeSource derives an internal address from the source wallet and account
 // for this unsigned tx, if a change address had not been previously derived.
 // The derived (or previously derived) address is used to prepare a
 // change source for receiving change from this tx back into the wallet.
-func (tx *TxAuthor) changeSource(ctx context.Context) (txauthor.ChangeSource, error) {
+func (tx *TxAuthor) changeSource(ctx context.Context) (func() ([]byte, error), error) {
 	if tx.changeAddress == "" {
-		address, err := tx.sourceWallet.internal.NewChangeAddress(ctx, tx.sourceAccountNumber)
+		address, err := tx.sourceWallet.internal.NewChangeAddress(tx.sourceAccountNumber, waddrmgr.KeyScopeBIP0044)
 		if err != nil {
 			return nil, fmt.Errorf("change address error: %v", err)
 		}
@@ -271,11 +265,5 @@ func (tx *TxAuthor) changeSource(ctx context.Context) (txauthor.ChangeSource, er
 		tx.changeAddress = address.String()
 	}
 
-	changeSource, err := txhelper.MakeTxChangeSource(tx.changeAddress, tx.sourceWallet.chainParams)
-	if err != nil {
-		log.Errorf("constructTransaction: error preparing change source: %v", err)
-		return nil, fmt.Errorf("change source error: %v", err)
-	}
-
-	return changeSource, nil
+	return txhelper.MakeTxChangeSource(tx.changeAddress, tx.sourceWallet.chainParams), nil
 }
