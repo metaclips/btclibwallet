@@ -88,6 +88,7 @@ func (mw *MultiWallet) markWalletAsDiscoveredAccounts(walletID int) error {
 }
 
 func (mw *MultiWallet) setNetworkBackend(chainClient chain.Interface) {
+	mw.chainClient = chainClient
 	for _, wallet := range mw.wallets {
 		if wallet.WalletOpened() {
 			wallet.internal.SynchronizeRPC(chainClient)

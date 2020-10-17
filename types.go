@@ -75,8 +75,8 @@ type GeneralSyncProgress struct {
 
 type CFiltersFetchProgressReport struct {
 	*GeneralSyncProgress
-	FetchedCfiltlers      int32
-	TotalCFitlersToFetch  int32
+	FetchedCFilters      int32
+	TotalCFiltersToFetch  int32
 	LastCFiltersTimestamp int64
 }
 

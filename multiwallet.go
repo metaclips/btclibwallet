@@ -13,12 +13,12 @@ import (
 	"github.com/asdine/storm"
 	"github.com/asdine/storm/q"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcwallet/chain"
 	w "github.com/btcsuite/btcwallet/wallet"
 	"github.com/c-ollins/btclibwallet/txindex"
 	"github.com/c-ollins/btclibwallet/utils"
 	"github.com/decred/dcrwallet/errors/v2"
 	bolt "go.etcd.io/bbolt"
-
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -28,6 +28,7 @@ type MultiWallet struct {
 	db       *storm.DB
 
 	chainParams *chaincfg.Params
+	chainClient chain.Interface
 	wallets     map[int]*Wallet
 	syncData    *syncData
 
@@ -298,7 +299,7 @@ func (mw *MultiWallet) CreateNewWallet(walletName, privatePassphrase string, pri
 	})
 }
 
-func (mw *MultiWallet) RestoreWallet(walletName, seedMnemonic, privatePassphrase string, privatePassphraseType int32) (*Wallet, error) {
+func (mw *MultiWallet) RestoreWallet(walletName, seedHex, privatePassphrase string, privatePassphraseType int32) (*Wallet, error) {
 
 	wallet := &Wallet{
 		Name:                  walletName,
@@ -313,7 +314,7 @@ func (mw *MultiWallet) RestoreWallet(walletName, seedMnemonic, privatePassphrase
 			return err
 		}
 
-		return wallet.createWallet(privatePassphrase, seedMnemonic)
+		return wallet.createWallet(privatePassphrase, seedHex)
 	})
 }
 
@@ -564,7 +565,7 @@ func (mw *MultiWallet) OpenedWalletsCount() int32 {
 func (mw *MultiWallet) SyncedWalletsCount() int32 {
 	var syncedWallets int32
 	for _, wallet := range mw.wallets {
-		if wallet.WalletOpened() && wallet.synced {
+		if wallet.WalletOpened() && wallet.IsSynced() {
 			syncedWallets++
 		}
 	}
