@@ -13,6 +13,7 @@ import (
 	"github.com/asdine/storm"
 	"github.com/asdine/storm/q"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcwallet/chain"
 	w "github.com/btcsuite/btcwallet/wallet"
 	"github.com/c-ollins/btclibwallet/txindex"
 	"github.com/c-ollins/btclibwallet/utils"
@@ -28,6 +29,7 @@ type MultiWallet struct {
 	db       *storm.DB
 
 	chainParams *chaincfg.Params
+	chainClient chain.Interface
 	wallets     map[int]*Wallet
 	syncData    *syncData
 
@@ -285,7 +287,6 @@ func (mw *MultiWallet) CreateNewWallet(walletName, privatePassphrase string, pri
 		CreatedAt:             time.Now(),
 		EncryptedSeed:         encryptedSeed,
 		PrivatePassphraseType: privatePassphraseType,
-		HasDiscoveredAccounts: true,
 	}
 
 	return mw.saveNewWallet(wallet, func() error {
@@ -304,7 +305,6 @@ func (mw *MultiWallet) RestoreWallet(walletName, seedMnemonic, privatePassphrase
 		Name:                  walletName,
 		PrivatePassphraseType: privatePassphraseType,
 		IsRestored:            true,
-		HasDiscoveredAccounts: false,
 	}
 
 	return mw.saveNewWallet(wallet, func() error {
@@ -334,7 +334,6 @@ func (mw *MultiWallet) LinkExistingWallet(walletName, walletDataDir, originalPub
 		Name:                  walletName,
 		PrivatePassphraseType: privatePassphraseType,
 		IsRestored:            true,
-		HasDiscoveredAccounts: false, // assume that account discovery hasn't been done
 	}
 
 	return mw.saveNewWallet(wallet, func() error {
@@ -564,7 +563,7 @@ func (mw *MultiWallet) OpenedWalletsCount() int32 {
 func (mw *MultiWallet) SyncedWalletsCount() int32 {
 	var syncedWallets int32
 	for _, wallet := range mw.wallets {
-		if wallet.WalletOpened() && wallet.synced {
+		if wallet.WalletOpened() && wallet.IsSynced() {
 			syncedWallets++
 		}
 	}

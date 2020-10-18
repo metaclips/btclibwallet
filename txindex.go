@@ -7,7 +7,6 @@ import (
 
 func (wallet *Wallet) IndexTransactions() error {
 	var txEndHeight int32
-
 	beginHeight, err := wallet.txDB.ReadIndexingStartBlock()
 	if err != nil {
 		log.Errorf("[%d] Get tx indexing start point error: %v", wallet.ID, err)
@@ -16,10 +15,14 @@ func (wallet *Wallet) IndexTransactions() error {
 
 	endHeight := wallet.GetBestBlock()
 
+	if beginHeight < 0 {
+		beginHeight = endHeight - 2000
+	}
+
 	startBlock := w.NewBlockIdentifierFromHeight(beginHeight)
 	endBlock := w.NewBlockIdentifierFromHeight(endHeight)
 
-	log.Debugf("[%d] Indexing transactions start height: %d, end height: %d", wallet.ID, beginHeight, endHeight)
+	log.Infof("[%d] Indexing transactions start height: %d, end height: %d", wallet.ID, beginHeight, endHeight)
 
 	cancel := make(<-chan struct{})
 	results, err := wallet.internal.GetTransactions(startBlock, endBlock, cancel)
@@ -49,7 +52,7 @@ func (wallet *Wallet) IndexTransactions() error {
 			return err
 		}
 
-		log.Debugf("[%d] Index saved for transactions in block %d", wallet.ID, txEndHeight)
+		log.Infof("[%d] Index saved for transactions in block %d", wallet.ID, txEndHeight)
 	}
 
 	for _, transaction := range results.UnminedTransactions {
@@ -69,7 +72,7 @@ func (wallet *Wallet) IndexTransactions() error {
 	if err != nil {
 		log.Errorf("[%d] Post-indexing tx count error :%v", wallet.ID, err)
 	} else if count > 0 {
-		log.Debugf("[%d] Transaction index finished at %d, %d transaction(s) indexed in total", wallet.ID, txEndHeight, count)
+		log.Infof("[%d] Transaction index finished at %d, %d transaction(s) indexed in total", wallet.ID, txEndHeight, count)
 	}
 
 	return nil

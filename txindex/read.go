@@ -13,7 +13,7 @@ func (db *DB) ReadIndexingStartBlock() (int32, error) {
 	var startBlockHeight int32
 	err := db.txDB.Get(TxBucketName, KeyEndBlock, &startBlockHeight)
 	if err != nil && err != storm.ErrNotFound {
-		return 0, err
+		return -1, err
 	}
 
 	startBlockHeight -= MaxReOrgBlocks

@@ -3,7 +3,6 @@ package dcrlibwallet
 import (
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcwallet/waddrmgr"
-	"github.com/decred/dcrwallet/errors/v2"
 )
 
 // AddressInfo holds information about an address
@@ -66,10 +65,6 @@ func (wallet *Wallet) AddressInfo(address string) (*AddressInfo, error) {
 }
 
 func (wallet *Wallet) CurrentAddress(account int32) (string, error) {
-	if wallet.IsRestored && !wallet.HasDiscoveredAccounts {
-		return "", errors.E(ErrAddressDiscoveryNotDone)
-	}
-
 	addr, err := wallet.internal.CurrentAddress(uint32(account), waddrmgr.KeyScopeBIP0044)
 	if err != nil {
 		log.Error(err)
@@ -79,10 +74,6 @@ func (wallet *Wallet) CurrentAddress(account int32) (string, error) {
 }
 
 func (wallet *Wallet) NextAddress(account int32) (string, error) {
-	if wallet.IsRestored && !wallet.HasDiscoveredAccounts {
-		return "", errors.E(ErrAddressDiscoveryNotDone)
-	}
-
 	addr, err := wallet.internal.NewAddress(uint32(account), waddrmgr.KeyScopeBIP0044)
 	if err != nil {
 		log.Error(err)

@@ -14,7 +14,7 @@ import (
 	"github.com/btcsuite/btcwallet/wallet"
 	"github.com/btcsuite/btcwallet/wtxmgr"
 	"github.com/jrick/logrotate/rotator"
-	// "github.com/lightninglabs/neutrino"
+	"github.com/lightninglabs/neutrino"
 )
 
 // logWriter implements an io.Writer that outputs to both standard output and
@@ -45,7 +45,7 @@ var (
 	// application shutdown.
 	logRotator *rotator.Rotator
 
-	log       = backendLog.Logger("DLWL")
+	log       = backendLog.Logger("BLWL")
 	walletLog = backendLog.Logger("WLLT")
 	txmgrLog  = backendLog.Logger("TMGR")
 	chainLog  = backendLog.Logger("CHNS")
@@ -57,7 +57,9 @@ func init() {
 	wallet.UseLogger(walletLog)
 	wtxmgr.UseLogger(txmgrLog)
 	chain.UseLogger(chainLog)
-	// neutrino.UseLogger(btcnLog)
+	if true {
+		neutrino.UseLogger(btcnLog)
+	}
 }
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.

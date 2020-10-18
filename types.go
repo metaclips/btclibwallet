@@ -63,6 +63,7 @@ type SyncProgressListener interface {
 	OnSyncStarted(wasRestarted bool)
 	OnPeerConnectedOrDisconnected(numberOfConnectedPeers int32)
 	OnCFiltersFetchProgress(cFiltersFetchProgress *CFiltersFetchProgressReport)
+	OnRescanProgress(rescanProgressReport *RescanProgressReport)
 	OnSyncCompleted()
 	OnSyncCanceled(willRestart bool)
 	OnSyncEndedWithError(err error)
@@ -75,9 +76,15 @@ type GeneralSyncProgress struct {
 
 type CFiltersFetchProgressReport struct {
 	*GeneralSyncProgress
-	FetchedCfiltlers      int32
-	TotalCFitlersToFetch  int32
+	FetchedCFilters       int32
+	TotalCFiltersToFetch  int32
 	LastCFiltersTimestamp int64
+}
+
+type RescanProgressReport struct {
+	TotalHeadersToScan  int32 `json:"totalHeadersToScan"`
+	CurrentRescanHeight int32 `json:"currentRescanHeight"`
+	RescanProgress      int32 `json:"rescanProgress"`
 }
 
 /** end sync-related types */

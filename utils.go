@@ -279,7 +279,7 @@ func backupFile(fileName string, suffix int) (newName string, err error) {
 	return newName, nil
 }
 
-func initWalletLoader(chainParams *chaincfg.Params, walletDataDir string) *wallet.Loader {
+func  initWalletLoader(chainParams *chaincfg.Params, walletDataDir string) *wallet.Loader {
 	walletLoader := wallet.NewLoader(chainParams, walletDataDir, true, 250)
 
 	// if walletDbDriver != "" {

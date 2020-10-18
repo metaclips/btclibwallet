@@ -22,7 +22,6 @@ type Wallet struct {
 	CreatedAt             time.Time `storm:"index"`
 	EncryptedSeed         []byte
 	IsRestored            bool
-	HasDiscoveredAccounts bool
 	PrivatePassphraseType int32
 
 	internal    *w.Wallet
@@ -31,7 +30,6 @@ type Wallet struct {
 	loader      *w.Loader
 	txDB        *txindex.DB
 
-	synced  bool
 	syncing bool
 	waiting bool
 

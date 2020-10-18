@@ -71,26 +71,10 @@ func (mw *MultiWallet) loadWalletTemporarily(ctx context.Context, walletDataDir,
 	return nil
 }
 
-func (mw *MultiWallet) markWalletAsDiscoveredAccounts(walletID int) error {
-	wallet := mw.WalletWithID(walletID)
-	if wallet == nil {
-		return errors.New(ErrNotExist)
-	}
-
-	log.Infof("Set discovered accounts = true for wallet %d", wallet.ID)
-	wallet.HasDiscoveredAccounts = true
-	err := mw.db.Save(wallet)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (mw *MultiWallet) setNetworkBackend(chainClient chain.Interface) {
+	mw.chainClient = chainClient
 	for _, wallet := range mw.wallets {
 		if wallet.WalletOpened() {
-			wallet.internal.SynchronizeRPC(chainClient)
 
 			if chainClient == nil {
 				wallet.internal.SetChainSynced(false)
@@ -98,6 +82,7 @@ func (mw *MultiWallet) setNetworkBackend(chainClient chain.Interface) {
 				wallet.internal.Stop()
 				wallet.internal.WaitForShutdown()
 				wallet.internal.Start()
+				log.Info("Wallet was restarted due to sync cancellation")
 			}
 		}
 	}
