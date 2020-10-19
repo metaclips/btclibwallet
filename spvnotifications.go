@@ -1,4 +1,4 @@
-package dcrlibwallet
+package btclibwallet
 
 import (
 	// "github.com/btcsuite/btcutil"
@@ -26,48 +26,10 @@ func (mw *MultiWallet) spvSyncNotificationCallbacks() *neutrino.Notifications {
 		FetchMissingCFiltersFinished: func() {
 
 			wallet := mw.WalletWithID(1)
-			wallet.internal.SetChainSynced(true)
+			wallet.internal.SetChainSynced(true) // This might be wrong
 
 			log.Infof("FetchMissingCFiltersFinished Synced: %v, Syncing: %v", wallet.internal.ChainSynced(), wallet.internal.SynchronizingToNetwork())
 			mw.synced()
-
-			// balance, err := wallet.GetAccountBalance(0)
-			// if err != nil {
-			// 	log.Error(err)
-			// } else {
-			// 	// for i := 0; i < 200; i++ {
-			// 	// 	_, err = wallet.NextAddress(0)
-			// 	// 	if err != nil {
-			// 	// 		log.Error(err)
-			// 	// 	}
-			// 	// }
-			// 	// log.Info("Generated 200 addresses")
-
-			// 	// addr, err := wallet.NextAddress(0)
-			// 	// if err != nil {
-			// 	// 	log.Error(err)
-			// 	// }
-
-			// 	addrs, err := wallet.internal.AccountAddresses(0)
-			// 	if err != nil {
-			// 		log.Error(err)
-			// 	}
-
-			// 	unspent, err := wallet.internal.ListUnspent(0, 100*100, make(map[string]struct{}))
-			// 	if err != nil {
-			// 		log.Error(err)
-			// 	}
-
-			// 	for _, u := range unspent {
-			// 		log.Infof("Amount: %f BTC Tx: %s", u.Amount, u.TxID)
-			// 	}
-			// 	// log.Info("starting rescan")
-			// 	// err = wallet.internal.Rescan(addrs, []wtxmgr.Credit{})
-			// 	// if err != nil {
-			// 	// 	log.Error(err)
-			// 	// }
-			// 	log.Infof("Address: %s, Balance: %s, Addrs: %d, Synced: %v", "addr", btcutil.Amount(balance.Total), len(addrs), wallet.IsSynced())
-			// }
 		},
 	}
 }
@@ -77,7 +39,6 @@ func (mw *MultiWallet) handlePeerCountUpdate(peerCount int32) {
 	mw.syncData.mu.RLock()
 	mw.syncData.connectedPeers = peerCount
 	mw.syncData.mu.RUnlock()
-
 }
 
 func (mw *MultiWallet) fetchCFiltersStarted() {
@@ -193,7 +154,6 @@ func (mw *MultiWallet) estimateBlockHeadersCountAfter(lastHeaderTime int64) int3
 	targetTimePerBlockInSeconds := mw.chainParams.TargetTimePerBlock.Seconds()
 	estimatedHeadersDifference := timeDifferenceInSeconds / targetTimePerBlockInSeconds
 
-	log.Infof("lastHeaderTime: %d, timeDifferenceInSeconds: %f, estimatedHeadersDifference: %d", lastHeaderTime, timeDifferenceInSeconds, int32(math.Ceil(estimatedHeadersDifference)))
 	// return next integer value (upper limit) if estimatedHeadersDifference is a fraction
 	return int32(math.Ceil(estimatedHeadersDifference))
 }

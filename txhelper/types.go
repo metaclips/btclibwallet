@@ -6,6 +6,6 @@ const (
 	TxDirectionReceived    int32 = 1
 	TxDirectionTransferred int32 = 2
 
-	TxTypeRegular        = "Regular"
-	TxTypeCoinBase       = "Coinbase"
+	TxTypeRegular  = "Regular"
+	TxTypeCoinBase = "Coinbase"
 )

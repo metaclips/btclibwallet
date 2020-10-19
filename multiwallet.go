@@ -1,4 +1,4 @@
-package dcrlibwallet
+package btclibwallet
 
 import (
 	"context"
@@ -19,14 +19,12 @@ import (
 	"github.com/c-ollins/btclibwallet/utils"
 	"github.com/decred/dcrwallet/errors/v2"
 	bolt "go.etcd.io/bbolt"
-
 	"golang.org/x/crypto/bcrypt"
 )
 
 type MultiWallet struct {
-	dbDriver string
-	rootDir  string
-	db       *storm.DB
+	rootDir string
+	db      *storm.DB
 
 	chainParams *chaincfg.Params
 	chainClient chain.Interface
@@ -40,7 +38,7 @@ type MultiWallet struct {
 	cancelFuncs  []context.CancelFunc
 }
 
-func NewMultiWallet(rootDir, dbDriver, netType string) (*MultiWallet, error) {
+func NewMultiWallet(rootDir, netType string) (*MultiWallet, error) {
 	errors.Separator = ":: "
 
 	chainParams, err := utils.ChainParams(netType)
@@ -77,7 +75,6 @@ func NewMultiWallet(rootDir, dbDriver, netType string) (*MultiWallet, error) {
 	}
 
 	mw := &MultiWallet{
-		dbDriver:    dbDriver,
 		rootDir:     rootDir,
 		db:          walletsDb,
 		chainParams: chainParams,
@@ -116,7 +113,7 @@ func NewMultiWallet(rootDir, dbDriver, netType string) (*MultiWallet, error) {
 }
 
 func (mw *MultiWallet) Shutdown() {
-	log.Info("Shutting down dcrlibwallet")
+	log.Info("Shutting down btclibwallet")
 
 	// Trigger shuttingDown signal to cancel all contexts created with `shutdownContextWithCancel`.
 	mw.shuttingDown <- true

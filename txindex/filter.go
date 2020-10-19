@@ -1,9 +1,9 @@
 package txindex
 
 import (
-	"github.com/c-ollins/btclibwallet/txhelper"
 	"github.com/asdine/storm"
 	"github.com/asdine/storm/q"
+	"github.com/c-ollins/btclibwallet/txhelper"
 )
 
 const (

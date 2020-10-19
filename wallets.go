@@ -1,4 +1,4 @@
-package dcrlibwallet
+package btclibwallet
 
 func (mw *MultiWallet) AllWallets() (wallets []*Wallet) {
 	for _, wallet := range mw.wallets {

@@ -3,7 +3,7 @@
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
-package dcrlibwallet
+package btclibwallet
 
 import (
 	"fmt"
@@ -64,7 +64,11 @@ func init() {
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
 var subsystemLoggers = map[string]btclog.Logger{
-	"DLWL": log,
+	"BLWL": log,
+	"WLLT": walletLog,
+	"TMGR": txmgrLog,
+	"CHNS": chainLog,
+	"BTCN": btcnLog,
 }
 
 // initLogRotator initializes the logging rotater to write logs to logFile and

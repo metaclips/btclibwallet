@@ -1,4 +1,4 @@
-package dcrlibwallet
+package btclibwallet
 
 import "github.com/decred/dcrwallet/errors/v2"
 

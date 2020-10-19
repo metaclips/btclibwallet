@@ -12,14 +12,8 @@ require (
 	github.com/btcsuite/btcwallet/wallet/txsizes v1.0.0
 	github.com/btcsuite/btcwallet/walletdb v1.2.0
 	github.com/btcsuite/btcwallet/wtxmgr v1.0.0
-	github.com/decred/dcrd/chaincfg v1.5.2 // indirect
-	github.com/decred/dcrd/dcrutil v1.4.0 // indirect
-	github.com/decred/dcrd/dcrutil/v2 v2.0.1
-	github.com/decred/dcrwallet/errors v1.1.0 // indirect
 	github.com/decred/dcrwallet/errors/v2 v2.0.0
-	github.com/decred/dcrwallet/walletseed v1.0.1
 	github.com/golang/protobuf v1.3.2 // indirect
-	github.com/jessevdk/go-flags v1.4.0
 	github.com/jrick/logrotate v1.0.0
 	github.com/kevinburke/nacl v0.0.0-20190829012316-f3ed23dbd7f8
 	github.com/lightninglabs/neutrino v0.11.0
@@ -36,6 +30,6 @@ require (
 	google.golang.org/appengine v1.5.0 // indirect
 )
 
-replace github.com/lightninglabs/neutrino => github.com/C-ollins/neutrino v0.11.1-0.20201015011948-c9c2b67eafff
+replace github.com/lightninglabs/neutrino => github.com/C-ollins/neutrino v0.11.1-0.20201019042253-3659f32ca2d5
 
 go 1.13

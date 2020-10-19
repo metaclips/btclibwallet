@@ -1,9 +1,9 @@
 package txhelper
 
 import (
-	"github.com/c-ollins/btclibwallet/addresshelper"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/c-ollins/btclibwallet/addresshelper"
 )
 
 func MakeTxOutput(address string, amountInAtom int64, chainParams *chaincfg.Params) (output *wire.TxOut, err error) {

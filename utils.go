@@ -1,4 +1,4 @@
-package dcrlibwallet
+package btclibwallet
 
 import (
 	"context"
@@ -14,25 +14,17 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcutil/hdkeychain"
 	"github.com/btcsuite/btcwallet/wallet"
-	"github.com/decred/dcrd/dcrutil/v2"
-	"github.com/decred/dcrwallet/walletseed"
 )
 
 const (
 	walletDbName = "wallet.db"
 
-	// Use 10% of estimated total headers fetch time to estimate rescan time
-	RescanPercentage = 0.1
-
-	// Use 80% of estimated total headers fetch time to estimate address discovery time
-	DiscoveryPercentage = 0.8
-
 	AtomsPerCoin = 1e8
 
 	// MaxAmount is the maximum transaction amount allowed in atoms.
-	// Decred - Changeme for release
 	MaxAmountAtom = 21e6 * AtomsPerCoin
 	MaxAmountDcr  = MaxAmountAtom / AtomsPerCoin
 
@@ -90,19 +82,6 @@ func (mw *MultiWallet) contextWithShutdownCancel() (context.Context, context.Can
 	return ctx, cancel
 }
 
-// func (mw *MultiWallet) ValidateExtPubKey(extendedPubKey string) error {
-// 	_, err := hdkeychain.NewKeyFromString(extendedPubKey, mw.chainParams)
-// 	if err != nil {
-// 		if err == hdkeychain.ErrInvalidChild {
-// 			return errors.New(ErrUnusableSeed)
-// 		}
-
-// 		return errors.New(ErrInvalid)
-// 	}
-
-// 	return nil
-// }
-
 func NormalizeAddress(addr string, defaultPort string) (string, error) {
 	// If the first SplitHostPort errors because of a missing port and not
 	// for an invalid host, add the port.  If the second SplitHostPort
@@ -131,11 +110,6 @@ func GenerateSeed() (string, error) {
 	return hex.EncodeToString(seed), nil
 }
 
-func VerifySeed(seedMnemonic string) bool {
-	_, err := walletseed.DecodeUserInput(seedMnemonic)
-	return err == nil
-}
-
 // ExtractDateOrTime returns the date represented by the timestamp as a date string if the timestamp is over 24 hours ago.
 // Otherwise, the time alone is returned as a string.
 func ExtractDateOrTime(timestamp int64) string {
@@ -152,11 +126,11 @@ func FormatUTCTime(timestamp int64) string {
 }
 
 func AmountCoin(amount int64) float64 {
-	return dcrutil.Amount(amount).ToCoin()
+	return btcutil.Amount(amount).ToBTC()
 }
 
 func AmountAtom(f float64) int64 {
-	amount, err := dcrutil.NewAmount(f)
+	amount, err := btcutil.NewAmount(f)
 	if err != nil {
 		log.Error(err)
 		return -1
@@ -192,39 +166,6 @@ func ShannonEntropy(text string) (entropy float64) {
 		}
 	}
 	return entropy
-}
-
-func TransactionDirectionName(direction int32) string {
-	switch direction {
-	case TxDirectionSent:
-		return "Sent"
-	case TxDirectionReceived:
-		return "Received"
-	case TxDirectionTransferred:
-		return "Yourself"
-	default:
-		return "invalid"
-	}
-}
-
-func CalculateTotalTimeRemaining(timeRemainingInSeconds int64) string {
-	minutes := timeRemainingInSeconds / 60
-	if minutes > 0 {
-		return fmt.Sprintf("%d min", minutes)
-	}
-	return fmt.Sprintf("%d sec", timeRemainingInSeconds)
-}
-
-func CalculateDaysBehind(lastHeaderTime int64) string {
-	diff := time.Since(time.Unix(lastHeaderTime, 0))
-	daysBehind := int(math.Round(diff.Hours() / 24))
-	if daysBehind == 0 {
-		return "<1 day"
-	} else if daysBehind == 1 {
-		return "1 day"
-	} else {
-		return fmt.Sprintf("%d days", daysBehind)
-	}
 }
 
 func roundUp(n float64) int32 {
@@ -279,12 +220,8 @@ func backupFile(fileName string, suffix int) (newName string, err error) {
 	return newName, nil
 }
 
-func  initWalletLoader(chainParams *chaincfg.Params, walletDataDir string) *wallet.Loader {
+func initWalletLoader(chainParams *chaincfg.Params, walletDataDir string) *wallet.Loader {
 	walletLoader := wallet.NewLoader(chainParams, walletDataDir, true, 250)
-
-	// if walletDbDriver != "" {
-	// 	walletLoader.SetDatabaseDriver(walletDbDriver)
-	// }
 
 	return walletLoader
 }

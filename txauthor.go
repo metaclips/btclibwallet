@@ -1,4 +1,4 @@
-package dcrlibwallet
+package btclibwallet
 
 import (
 	"bytes"
@@ -13,8 +13,8 @@ import (
 	"github.com/btcsuite/btcwallet/wallet/txauthor"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/btcsuite/btcwallet/wallet/txsizes"
-	"github.com/decred/dcrwallet/errors/v2"
 	"github.com/c-ollins/btclibwallet/txhelper"
+	"github.com/decred/dcrwallet/errors/v2"
 )
 
 type TxAuthor struct {

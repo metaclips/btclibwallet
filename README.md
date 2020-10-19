@@ -1,4 +1,4 @@
-# dcrlibwallet
+# btclibwallet
 
 [![Build Status](https://github.com/c-ollins/btclibwallet/workflows/Build/badge.svg)](https://github.com/c-ollins/btclibwallet/actions)
 
@@ -18,7 +18,7 @@ go get -t github.com/c-ollins/btclibwallet
 cd $GOPATH/src/github.com/c-ollins/btclibwallet/
 ```
 
-and run the following commands in dcrlibwallet directory.
+and run the following commands in btclibwallet directory.
 
 ```bash
 export GO111MODULE=on
@@ -28,6 +28,6 @@ export GO111MODULE=off
 gomobile bind -target=android # -target=ios for iOS
 ```
 
-dcrlibwallet can be built targeting different architectures of android which can be configured using the `-target` command line argument Ex. `gomobile bind -target=android/arm`, `gomobile bind -target=android/386`...
+btclibwallet can be built targeting different architectures of android which can be configured using the `-target` command line argument Ex. `gomobile bind -target=android/arm`, `gomobile bind -target=android/386`...
 
-Copy the generated library (dcrlibwallet.aar for android or dcrlibwallet.framewok in the case of iOS) into `libs` directory(`Frameworks` for iOS)
+Copy the generated library (btclibwallet.aar for android or btclibwallet.framewok in the case of iOS) into `libs` directory(`Frameworks` for iOS)

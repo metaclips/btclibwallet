@@ -1,12 +1,12 @@
-package dcrlibwallet
+package btclibwallet
 
 import (
 	"encoding/json"
 	"strconv"
 	"time"
 
-	"github.com/btcsuite/btcwallet/waddrmgr"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcwallet/waddrmgr"
 	"github.com/decred/dcrwallet/errors/v2"
 )
 

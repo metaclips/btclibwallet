@@ -1,14 +1,14 @@
-package dcrlibwallet
+package btclibwallet
 
 import (
 	"encoding/json"
 	"fmt"
 	"sort"
 
-	"github.com/c-ollins/btclibwallet/txhelper"
-	"github.com/c-ollins/btclibwallet/txindex"
 	"github.com/asdine/storm"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/c-ollins/btclibwallet/txhelper"
+	"github.com/c-ollins/btclibwallet/txindex"
 )
 
 const (

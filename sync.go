@@ -1,7 +1,6 @@
-package dcrlibwallet
+package btclibwallet
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -28,7 +27,6 @@ type syncData struct {
 	syncing      bool
 	chainClient  chain.Interface
 	syncCanceled chan struct{}
-	cancelRescan context.CancelFunc
 
 	// Flag to notify syncCanceled callback if the sync was canceled so as to be restarted.
 	restartSyncRequested bool
@@ -243,13 +241,12 @@ func (mw *MultiWallet) SpvSync() error {
 		mw.syncData.syncCanceled = make(chan struct{})
 		mw.syncData.mu.Unlock()
 
-		log.Info("S")
+		log.Info("Sync started broadcasting")
 		for _, listener := range mw.syncProgressListeners() {
 			listener.OnSyncStarted(restartSyncRequested)
 		}
 
 		chainClient.WaitForShutdown()
-		chainClient.Stop()
 		log.Info("Chainclient stopped")
 		close(mw.syncData.syncCanceled)
 
@@ -260,11 +257,9 @@ func (mw *MultiWallet) SpvSync() error {
 
 func (mw *MultiWallet) registerNotifications() {
 	for {
-		// log.Info("Listening to notifications: ", mw.IsSyncing())
 		select {
 		case n, ok := <-mw.chainClient.Notifications():
 			if !ok {
-				log.Info("Not Okay")
 				return
 			}
 
@@ -322,9 +317,6 @@ func (mw *MultiWallet) registerNotifications() {
 			log.Info("Sync cancelled")
 			return
 		}
-
-		// log.Info("Notifications returning")
-
 	}
 }
 

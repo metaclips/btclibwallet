@@ -1,8 +1,8 @@
 package txhelper
 
 import (
-	"github.com/c-ollins/btclibwallet/addresshelper"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/c-ollins/btclibwallet/addresshelper"
 )
 
 func MakeTxChangeSource(destAddr string, chainParams *chaincfg.Params) func() ([]byte, error) {

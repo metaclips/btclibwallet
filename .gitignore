@@ -1,6 +1,6 @@
 .idea
 .vscode
 vendor
-Dcrlibwallet.framework
-dcrlibwallet.aar
-dcrlibwallet-sources.jar
+btclibwallet.framework
+btclibwallet.aar
+btclibwallet-sources.jar

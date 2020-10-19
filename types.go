@@ -1,4 +1,4 @@
-package dcrlibwallet
+package btclibwallet
 
 type WalletsIterator struct {
 	currentIndex int

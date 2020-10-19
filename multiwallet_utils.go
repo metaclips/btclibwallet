@@ -1,4 +1,4 @@
-package dcrlibwallet
+package btclibwallet
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	logFileName   = "dcrlibwallet.log"
+	logFileName   = "btclibwallet.log"
 	walletsDbName = "wallets.db"
 
 	walletsMetadataBucketName    = "metadata"

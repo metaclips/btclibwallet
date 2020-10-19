@@ -1,4 +1,4 @@
-package dcrlibwallet
+package btclibwallet
 
 import (
 	w "github.com/btcsuite/btcwallet/wallet"
