@@ -30,7 +30,6 @@ type Wallet struct {
 	loader      *w.Loader
 	txDB        *txindex.DB
 
-	syncing bool
 	waiting bool
 
 	shuttingDown chan bool

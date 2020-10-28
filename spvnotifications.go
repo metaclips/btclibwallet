@@ -26,10 +26,22 @@ func (mw *MultiWallet) spvSyncNotificationCallbacks() *neutrino.Notifications {
 		FetchMissingCFiltersFinished: func() {
 
 			wallet := mw.WalletWithID(1)
-			wallet.internal.SetChainSynced(true) // This might be wrong
 
-			log.Infof("FetchMissingCFiltersFinished Synced: %v, Syncing: %v", wallet.internal.ChainSynced(), wallet.internal.SynchronizingToNetwork())
-			mw.synced()
+			_, bestBlock, _ := mw.chainClient.GetBestBlock()
+			log.Infof("Wallet best block: %d, Chain bestBlock: %d", wallet.GetBestBlock(), bestBlock)
+			log.Infof("FetchMissingCFiltersFinished")
+
+			wallet.internal.SynchronizeRPC(mw.chainClient) // wallet will start syncing immediately
+
+			go mw.registerNotifications()
+
+			if bestBlock > wallet.GetBestBlock() {
+				// log.Info("Wallet is behind, starting rescan")
+				// wallet.Rescan()
+			} else {
+				// wallet.internal.SetChainSynced(true)
+				// mw.synced()
+			}
 		},
 	}
 }

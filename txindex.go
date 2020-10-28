@@ -15,8 +15,8 @@ func (wallet *Wallet) IndexTransactions() error {
 
 	endHeight := wallet.GetBestBlock()
 
-	if beginHeight < 0 {
-		beginHeight = endHeight - 2000
+	if beginHeight <= 0 {
+		beginHeight = endHeight - 400 // TODO: confirm this logic
 	}
 
 	startBlock := w.NewBlockIdentifierFromHeight(beginHeight)
@@ -74,6 +74,8 @@ func (wallet *Wallet) IndexTransactions() error {
 	} else if count > 0 {
 		log.Infof("[%d] Transaction index finished at %d, %d transaction(s) indexed in total", wallet.ID, txEndHeight, count)
 	}
+
+	log.Info("Indexing did nothing: ", wallet.IsSynced())
 
 	return nil
 }

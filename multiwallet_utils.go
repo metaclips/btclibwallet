@@ -73,10 +73,11 @@ func (mw *MultiWallet) loadWalletTemporarily(ctx context.Context, walletDataDir,
 
 func (mw *MultiWallet) setNetworkBackend(chainClient chain.Interface) {
 	mw.chainClient = chainClient
-	for _, wallet := range mw.wallets {
-		if wallet.WalletOpened() {
 
-			if chainClient == nil {
+	if chainClient == nil {
+		for _, wallet := range mw.wallets {
+			if wallet.WalletOpened() {
+
 				wallet.internal.SetChainSynced(false)
 
 				wallet.internal.Stop()

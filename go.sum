@@ -1,4 +1,6 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
+github.com/C-ollins/btcwallet v0.0.0-20201028031044-8a5e3cc314c3 h1:yNQu/W9hkQjW2BHFVYTG1IFy2M3zH7ktkHbmIYY60YM=
+github.com/C-ollins/btcwallet v0.0.0-20201028031044-8a5e3cc314c3/go.mod h1:qtPAohN1ioo0pvJt/j7bZM8ANBWlYWVCVFL0kkijs7s=
 github.com/C-ollins/neutrino v0.11.1-0.20201019042253-3659f32ca2d5 h1:Wo+wLGzddAfHVguVsb+QpDvS71LDjx0VrWO724VcqOc=
 github.com/C-ollins/neutrino v0.11.1-0.20201019042253-3659f32ca2d5/go.mod h1:MlZmoKa7CJP3eR1s5yB7Rm5aSyadpKkxqAwLQmog7N0=
 github.com/DataDog/zstd v1.3.5 h1:DtpNbljikUepEPD16hD4LvIcmhnhdLTiW/5pHgbmp14=
@@ -18,8 +20,6 @@ github.com/btcsuite/btcutil v0.0.0-20190425235716-9e5f4b9a998d h1:yJzD/yFppdVCf6
 github.com/btcsuite/btcutil v0.0.0-20190425235716-9e5f4b9a998d/go.mod h1:+5NJ2+qvTyV9exUAL/rxXi3DcLg2Ts+ymUAY5y4NvMg=
 github.com/btcsuite/btcutil v1.0.2 h1:9iZ1Terx9fMIOtq1VrwdqfsATL9MC2l8ZrUY6YZ2uts=
 github.com/btcsuite/btcutil v1.0.2/go.mod h1:j9HUFwoQRsZL3V4n+qG+CUnEGHOarIxfC3Le2Yhbcts=
-github.com/btcsuite/btcwallet v0.11.0 h1:XhwqdhEchy5a0q6R+y3F82roD2hYycPCHovgNyJS08w=
-github.com/btcsuite/btcwallet v0.11.0/go.mod h1:qtPAohN1ioo0pvJt/j7bZM8ANBWlYWVCVFL0kkijs7s=
 github.com/btcsuite/btcwallet/wallet/txauthor v1.0.0 h1:KGHMW5sd7yDdDMkCZ/JpP0KltolFsQcB973brBnfj4c=
 github.com/btcsuite/btcwallet/wallet/txauthor v1.0.0/go.mod h1:VufDts7bd/zs3GV13f/lXc/0lXrPnvxD/NvmpG/FEKU=
 github.com/btcsuite/btcwallet/wallet/txrules v1.0.0 h1:2VsfS0sBedcM5KmDzRMT3+b6xobqWveZGvjb+jFez5w=

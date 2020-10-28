@@ -65,7 +65,7 @@ func (mw *MultiWallet) initActiveSyncData() {
 	cFiltersFetchProgress.GeneralSyncProgress = &GeneralSyncProgress{}
 
 	mw.syncData.activeSyncData = &activeSyncData{
-		syncStage: InvalidSyncStage,
+		syncStage: CFiltersFetchSyncStage,
 
 		cFiltersFetchProgress: cFiltersFetchProgress,
 
@@ -184,7 +184,18 @@ func (mw *MultiWallet) SpvSync() error {
 
 	wallet := mw.wallets[1]
 	wallet.waiting = true
-	wallet.syncing = true
+
+	mw.syncData.mu.Lock()
+	restartSyncRequested := mw.syncData.restartSyncRequested
+	mw.syncData.restartSyncRequested = false
+	mw.syncData.syncing = true
+	mw.syncData.syncCanceled = make(chan struct{})
+	mw.syncData.mu.Unlock()
+
+	log.Info("Sync started broadcasting")
+	for _, listener := range mw.syncProgressListeners() {
+		listener.OnSyncStarted(restartSyncRequested)
+	}
 
 	go func() {
 		neutrino.MaxPeers = neutrino.MaxPeers
@@ -224,27 +235,7 @@ func (mw *MultiWallet) SpvSync() error {
 			return
 		}
 
-		wallet.internal.SynchronizeRPC(chainClient)
-
 		mw.setNetworkBackend(chainClient)
-		go mw.registerNotifications()
-		if err = chainClient.NotifyBlocks(); err != nil {
-			log.Error("Notification error", err)
-		}
-
-		var restartSyncRequested bool
-
-		mw.syncData.mu.Lock()
-		restartSyncRequested = mw.syncData.restartSyncRequested
-		mw.syncData.restartSyncRequested = false
-		mw.syncData.syncing = true
-		mw.syncData.syncCanceled = make(chan struct{})
-		mw.syncData.mu.Unlock()
-
-		log.Info("Sync started broadcasting")
-		for _, listener := range mw.syncProgressListeners() {
-			listener.OnSyncStarted(restartSyncRequested)
-		}
 
 		chainClient.WaitForShutdown()
 		log.Info("Chainclient stopped")
@@ -263,20 +254,19 @@ func (mw *MultiWallet) registerNotifications() {
 				return
 			}
 
-			var notificationName string
 			switch n := n.(type) {
 			case chain.ClientConnected:
-				notificationName = "client connected"
+				log.Info("Client conected")
 			case chain.BlockConnected:
-				notificationName = "block connected"
-				continue
+				if mw.IsSynced() {
+					log.Info("block connected")
+				}
 			case chain.BlockDisconnected:
-				notificationName = "block disconnected"
+				log.Info("block disconnected")
 			case chain.RelevantTx:
-				notificationName = "relevant transaction"
+				log.Info("relevant transaction")
 			case chain.FilteredBlockConnected:
-				notificationName = "filtered block connected"
-				continue
+				// log.Info("filtered block connected")
 			case *chain.RescanProgress:
 
 				wallet := mw.WalletWithID(1)
@@ -293,26 +283,19 @@ func (mw *MultiWallet) registerNotifications() {
 					syncProgressListener.OnRescanProgress(rescanProgressReport)
 				}
 
-				notificationName = fmt.Sprintf("rescan progress %d of %d, Synced: %v, Syncing: %v",
-					n.Height, bestBlock, wallet.internal.ChainSynced(), wallet.internal.SynchronizingToNetwork())
+				log.Infof("rescan progress %d of %d, Synced: %v",
+					n.Height, bestBlock, wallet.internal.ChainSynced())
 
 			case *chain.RescanFinished:
 
-				notificationName = "Rescan done"
-				mw.synced()
-
+				_, bestBlock, _ := mw.chainClient.GetBestBlock()
 				wallet := mw.WalletWithID(1)
-				balance, err := wallet.GetAccountBalance(0)
-				if err != nil {
-					log.Errorf("Error acccount balance: %v", err)
-				} else {
-					notificationName += fmt.Sprintf("\nNNNAddress: %s, Balance: %d", "", btcutil.Amount(balance.Total))
-				}
-
-				notificationName += fmt.Sprintf("\nrescan finished Synced: %v", wallet.internal.ChainSynced())
+				log.Infof("Wallet best block: %d, Chain bestBlock: %d", wallet.GetBestBlock(), bestBlock)
+				log.Info("Rescan done, Synced: ", wallet.internal.ChainSynced())
+				wallet.internal.SetChainSynced(true) // This might be wrong
+				mw.synced()
 			}
 
-			log.Info("Notication type:", notificationName)
 		case <-mw.syncData.syncCanceled:
 			log.Info("Sync cancelled")
 			return
@@ -370,7 +353,6 @@ func (mw *MultiWallet) resetSyncData() {
 func (mw *MultiWallet) synced() {
 
 	wallet := mw.wallets[1]
-	wallet.syncing = false
 	mw.listenForTransactions(wallet.ID)
 	log.Info("Synced")
 
@@ -378,6 +360,9 @@ func (mw *MultiWallet) synced() {
 	mw.syncData.syncing = false
 	mw.syncData.synced = true
 	mw.syncData.mu.Unlock()
+
+	bal, _ := wallet.GetAccountBalance(0)
+	log.Info("Balance: ", bal.Total)
 
 	// begin indexing transactions after sync is completed,
 	// syncProgressListeners.OnSynced() will be invoked after transactions are indexed
@@ -397,7 +382,7 @@ func (mw *MultiWallet) synced() {
 }
 
 func (wallet *Wallet) Rescan() error {
-	if wallet.internal.ChainClient != nil {
+	if wallet.IsSyncing() {
 
 		accounts, err := wallet.GetAccountsRaw()
 		if err != nil {
@@ -411,10 +396,12 @@ func (wallet *Wallet) Rescan() error {
 				return err
 			}
 
+			log.Info("Address: ", addrs)
+
 			accountAddresses = append(accountAddresses, addrs...)
 		}
 
-		log.Infof("Starting rescan with %d address froom %d account", len(accountAddresses), len(accounts.Acc))
+		log.Infof("Starting manual rescan with %d address froom %d account", len(accountAddresses), len(accounts.Acc))
 		go func() {
 			err = wallet.internal.Rescan(accountAddresses, []wtxmgr.Credit{})
 			if err != nil {
@@ -479,7 +466,7 @@ func (wallet *Wallet) IsSynced() bool {
 }
 
 func (wallet *Wallet) IsSyncing() bool {
-	return wallet.syncing
+	return wallet.internal.SynchronizingToNetwork()
 }
 
 func (mw *MultiWallet) IsConnectedToDecredNetwork() bool {

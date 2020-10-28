@@ -221,7 +221,9 @@ func backupFile(fileName string, suffix int) (newName string, err error) {
 }
 
 func initWalletLoader(chainParams *chaincfg.Params, walletDataDir string) *wallet.Loader {
-	walletLoader := wallet.NewLoader(chainParams, walletDataDir, true, 250)
+	// no recovery window
+	walletLoader := wallet.NewLoader(chainParams, walletDataDir, true, 0)
+	log.Info("Using 0 recovery window")
 
 	return walletLoader
 }

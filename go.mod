@@ -30,6 +30,9 @@ require (
 	google.golang.org/appengine v1.5.0 // indirect
 )
 
-replace github.com/lightninglabs/neutrino => github.com/C-ollins/neutrino v0.11.1-0.20201019042253-3659f32ca2d5
+replace (
+	github.com/btcsuite/btcwallet => github.com/C-ollins/btcwallet v0.0.0-20201028031044-8a5e3cc314c3
+	github.com/lightninglabs/neutrino => github.com/C-ollins/neutrino v0.11.1-0.20201019042253-3659f32ca2d5
+)
 
 go 1.13
