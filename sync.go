@@ -30,7 +30,6 @@ type syncData struct {
 	// Flag to notify syncCanceled callback if the sync was canceled so as to be restarted.
 	restartSyncRequested bool
 
-	rescanning     bool
 	connectedPeers int32
 
 	*activeSyncData
@@ -45,8 +44,6 @@ type activeSyncData struct {
 	beginFetchTimeStamp    int64
 	startCFiltersHeight    int32
 	cFiltersFetchTimeSpent int64
-
-	rescanStartTime int64
 
 	totalInactiveSeconds int64
 }
@@ -197,9 +194,9 @@ func (mw *MultiWallet) SpvSync() error {
 	}
 
 	go func() {
-		neutrino.MaxPeers = neutrino.MaxPeers
-		neutrino.BanDuration = neutrino.BanDuration
-		neutrino.BanThreshold = neutrino.BanThreshold
+		// neutrino.MaxPeers = neutrino.MaxPeers
+		// neutrino.BanDuration = neutrino.BanDuration
+		// neutrino.BanThreshold = neutrino.BanThreshold
 
 		var (
 			chainService *neutrino.ChainService
@@ -207,11 +204,11 @@ func (mw *MultiWallet) SpvSync() error {
 		)
 		spvdb, err := walletdb.Create("bdb",
 			filepath.Join(mw.rootDir, "neutrino.db"), true)
-		defer spvdb.Close()
 		if err != nil {
 			log.Errorf("Unable to create Neutrino DB: %s", err)
 			return
 		}
+		defer spvdb.Close()
 
 		chainService, err = neutrino.NewChainService(
 			neutrino.Config{

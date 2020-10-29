@@ -8,8 +8,6 @@ import (
 	"github.com/btcsuite/btcutil"
 )
 
-const scriptVersion = 0
-
 func PkScript(address string, chainParams *chaincfg.Params) ([]byte, error) {
 	addr, err := btcutil.DecodeAddress(address, chainParams)
 	if err != nil {

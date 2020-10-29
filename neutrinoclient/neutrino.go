@@ -162,7 +162,7 @@ func (s *NeutrinoClient) StartupSync() error {
 
 	bestBlock, err := s.CS.BestBlock()
 	if err != nil {
-		return fmt.Errorf("Can't get chain service's best block: %s", err)
+		return fmt.Errorf("can't get chain service's best block: %s", err)
 	}
 
 	err = s.wallet.RollbackMissingBlocks(birthdayStamp)
@@ -180,7 +180,7 @@ func (s *NeutrinoClient) StartupSync() error {
 
 	header, err := s.CS.GetBlockHeader(&bestBlock.Hash)
 	if err != nil {
-		return fmt.Errorf("Can't get block header for hash %v: %s",
+		return fmt.Errorf("can't get block header for hash %v: %s",
 			bestBlock.Hash, err)
 	}
 
@@ -245,6 +245,7 @@ func (s *NeutrinoClient) StartupSync() error {
 	s.rescan = newRescan
 	s.rescanErr = s.rescan.Start()
 	s.clientMtx.Unlock()
+	s.rescanStart()
 
 	return nil
 }
@@ -454,7 +455,7 @@ func (s *NeutrinoClient) Rescan(startHeight int64) error {
 
 	bestBlock, err := s.CS.BestBlock()
 	if err != nil {
-		return fmt.Errorf("Can't get chain service's best block: %s", err)
+		return fmt.Errorf("can't get chain service's best block: %s", err)
 	}
 
 	startBlockHash, err := s.GetBlockHash(startHeight)
@@ -538,7 +539,7 @@ func (s *NeutrinoClient) NotifyBlocks() error {
 	// If we're synced, we're already notifying on blocks. Otherwise,
 	// start a rescan without watching any addresses.
 	if !s.walletSynced {
-		return fmt.Errorf("Wallet not synced")
+		return fmt.Errorf("wallet not synced")
 	}
 
 	return nil
@@ -555,7 +556,7 @@ func (s *NeutrinoClient) NotifyReceived(addrs []btcutil.Address) error {
 		return s.rescan.Update(neutrino.AddAddrs(addrs...))
 	}
 
-	return fmt.Errorf("Wallet not synced")
+	return fmt.Errorf("wallet not synced")
 }
 
 // onFilteredBlockConnected sends appropriate notifications to the notification
