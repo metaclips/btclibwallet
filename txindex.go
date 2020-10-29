@@ -52,7 +52,7 @@ func (wallet *Wallet) IndexTransactions() error {
 		}
 
 		txEndHeight = block.Height
-		err := wallet.txDB.SaveLastIndexPoint(int32(txEndHeight))
+		err := wallet.txDB.SaveLastIndexPoint(txEndHeight)
 		if err != nil {
 			log.Errorf("[%d] Set tx index end block height error: ", wallet.ID, err)
 			return err

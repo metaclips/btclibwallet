@@ -68,11 +68,11 @@ func (mw *MultiWallet) listenForTransactions(walletID int) {
 							}
 
 							log.Infof("[%d] New confirmed transaction: %s", wallet.ID, transaction.Hash)
-							mw.publishTransactionConfirmed(wallet.ID, transaction.Hash.String(), int32(block.Height))
+							mw.publishTransactionConfirmed(wallet.ID, transaction.Hash.String(), block.Height)
 						}
 					}
 
-					mw.publishBlockAttached(wallet.ID, int32(block.Height))
+					mw.publishBlockAttached(wallet.ID, block.Height)
 				}
 
 			case <-mw.syncData.syncCanceled:

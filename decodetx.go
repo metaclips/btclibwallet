@@ -63,7 +63,7 @@ func DecodeTransaction(walletTx *TxInfoFromWallet, netParams *chaincfg.Params) (
 		Timestamp:   walletTx.Timestamp,
 		BlockHeight: walletTx.BlockHeight,
 
-		Version:  int32(msgTx.Version),
+		Version:  msgTx.Version,
 		LockTime: int32(msgTx.LockTime),
 		Fee:      walletTx.Fee,
 		Size:     txSize,

@@ -139,7 +139,7 @@ func (mw *MultiWallet) FetchMissingCFiltersFinished() {
 
 	err := mw.chainClient.StartupSync()
 	if err != nil {
-		log.Info("Error occured sync startup:", err)
+		log.Info("Error occurred sync startup:", err)
 	}
 }
 
