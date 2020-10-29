@@ -51,12 +51,25 @@ func (mw *MultiWallet) listenForTransactions(walletID int) {
 							return
 						}
 
-						_, err = wallet.txDB.SaveOrUpdate(&Transaction{}, tempTransaction)
+						overwritten, err := wallet.txDB.SaveOrUpdate(&Transaction{}, tempTransaction)
 						if err != nil {
 							log.Errorf("[%d] Incoming block replace tx error :%v", wallet.ID, err)
 							return
 						}
-						mw.publishTransactionConfirmed(wallet.ID, transaction.Hash.String(), int32(block.Height))
+
+						if !overwritten {
+							log.Infof("[%d] New Transaction %s", wallet.ID, tempTransaction.Hash)
+
+							result, err := json.Marshal(tempTransaction)
+							if err != nil {
+								log.Error(err)
+							} else {
+								mw.mempoolTransactionNotification(string(result))
+							}
+
+							log.Infof("[%d] New confirmed transaction", wallet.ID, transaction.Hash)
+							mw.publishTransactionConfirmed(wallet.ID, transaction.Hash.String(), int32(block.Height))
+						}
 					}
 
 					mw.publishBlockAttached(wallet.ID, int32(block.Height))

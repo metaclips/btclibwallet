@@ -1,49 +1,19 @@
 package btclibwallet
 
 import (
-	// "github.com/btcsuite/btcutil"
-	// "github.com/btcsuite/btcwallet/wtxmgr"
 	"math"
 	"time"
 
-	"github.com/lightninglabs/neutrino"
+	"github.com/c-ollins/btclibwallet/neutrinoclient"
+	"golang.org/x/sync/errgroup"
 )
 
-func (mw *MultiWallet) spvSyncNotificationCallbacks() *neutrino.Notifications {
-	// sync uupdate mu
-	return &neutrino.Notifications{
-		PeerConnected: func(peerCount int32, addr string) {
-			mw.handlePeerCountUpdate(peerCount)
-		},
-		PeerDisconnected: func(peerCount int32, addr string) {
-			mw.handlePeerCountUpdate(peerCount)
-		},
-		Synced: func(synced bool) {
-			log.Infof("Synced: %v", synced)
-		},
-		FetchMissingCFiltersStarted:  mw.fetchCFiltersStarted,
-		FetchMissingCFiltersProgress: mw.fetchCFiltersProgress,
-		FetchMissingCFiltersFinished: func() {
+func (mw *MultiWallet) PeerConnected(peerCount int32, addr string) {
+	mw.handlePeerCountUpdate(peerCount)
+}
 
-			wallet := mw.WalletWithID(1)
-
-			_, bestBlock, _ := mw.chainClient.GetBestBlock()
-			log.Infof("Wallet best block: %d, Chain bestBlock: %d", wallet.GetBestBlock(), bestBlock)
-			log.Infof("FetchMissingCFiltersFinished")
-
-			wallet.internal.SynchronizeRPC(mw.chainClient) // wallet will start syncing immediately
-
-			go mw.registerNotifications()
-
-			if bestBlock > wallet.GetBestBlock() {
-				// log.Info("Wallet is behind, starting rescan")
-				// wallet.Rescan()
-			} else {
-				// wallet.internal.SetChainSynced(true)
-				// mw.synced()
-			}
-		},
-	}
+func (mw *MultiWallet) PeerDisconnected(peerCount int32, addr string) {
+	mw.handlePeerCountUpdate(peerCount)
 }
 
 func (mw *MultiWallet) handlePeerCountUpdate(peerCount int32) {
@@ -53,7 +23,7 @@ func (mw *MultiWallet) handlePeerCountUpdate(peerCount int32) {
 	mw.syncData.mu.RUnlock()
 }
 
-func (mw *MultiWallet) fetchCFiltersStarted() {
+func (mw *MultiWallet) FetchMissingCFiltersStarted() {
 	log.Info("FetchMissingCFiltersStarted Syncing:", mw.IsSyncing())
 	if !mw.IsSyncing() {
 		return
@@ -79,7 +49,7 @@ func (mw *MultiWallet) fetchCFiltersStarted() {
 	mw.syncData.mu.Unlock()
 }
 
-func (mw *MultiWallet) fetchCFiltersProgress(missingCFiltersStart, missingCFiltersEnd int32, lastFetchedCFiltersTime int64) {
+func (mw *MultiWallet) FetchMissingCFiltersProgress(missingCFiltersStart, missingCFiltersEnd int32, lastFetchedCFiltersTime int64) {
 	sessionFetchedCFilters := missingCFiltersEnd - missingCFiltersStart
 	log.Infof("FetchMissingCFiltersProgress: %d of %d  Syncing: %v", sessionFetchedCFilters, missingCFiltersEnd+mw.estimateBlockHeadersCountAfter(lastFetchedCFiltersTime), mw.IsSyncing())
 
@@ -159,6 +129,24 @@ func (mw *MultiWallet) publishCFiltersFetchProgress() {
 	}
 }
 
+func (mw *MultiWallet) FetchMissingCFiltersFinished() {
+	wallet := mw.WalletWithID(1)
+
+	_, bestBlock, _ := mw.chainClient.GetBestBlock()
+	log.Infof("Wallet best block: %d, Chain bestBlock: %d", wallet.GetBestBlock(), bestBlock)
+	log.Infof("FetchMissingCFiltersFinished")
+
+	switch client := mw.chainClient.(type) {
+	case *neutrinoclient.NeutrinoClient:
+		log.Info("Starting sync")
+
+		err := client.StartupSync()
+		if err != nil {
+			log.Info("Error occured sync startup:", err)
+		}
+	}
+}
+
 func (mw *MultiWallet) estimateBlockHeadersCountAfter(lastHeaderTime int64) int32 {
 	// Use the difference between current time (now) and last reported block time,
 	// to estimate total headers to fetch.
@@ -168,4 +156,61 @@ func (mw *MultiWallet) estimateBlockHeadersCountAfter(lastHeaderTime int64) int3
 
 	// return next integer value (upper limit) if estimatedHeadersDifference is a fraction
 	return int32(math.Ceil(estimatedHeadersDifference))
+}
+
+func (mw *MultiWallet) RescanStarted() {
+	log.Info("Rescan started")
+}
+
+func (mw *MultiWallet) RescanProgress(rescannedThrough int32) {
+	wallet := mw.WalletWithID(1)
+
+	_, bestBlock, _ := mw.chainClient.GetBestBlock()
+
+	rescanProgressReport := &RescanProgressReport{
+		TotalHeadersToScan:  bestBlock,
+		CurrentRescanHeight: rescannedThrough,
+		RescanProgress:      (rescannedThrough / bestBlock) * 100,
+	}
+
+	for _, syncProgressListener := range mw.syncProgressListeners() {
+		syncProgressListener.OnRescanProgress(rescanProgressReport)
+	}
+
+	log.Infof("rescan progress %d of %d, Synced: %v",
+		rescannedThrough, bestBlock, wallet.internal.ChainSynced())
+}
+
+func (mw *MultiWallet) RescanFinished() {
+	_, bestBlock, _ := mw.chainClient.GetBestBlock()
+	wallet := mw.WalletWithID(1)
+	log.Infof("Wallet best block: %d, Chain bestBlock: %d", wallet.GetBestBlock(), bestBlock)
+	log.Info("Rescan done, Synced: ", wallet.internal.ChainSynced())
+}
+
+func (mw *MultiWallet) Synced() {
+
+	wallet := mw.wallets[1]
+	mw.listenForTransactions(wallet.ID)
+	log.Info("Synced")
+
+	mw.syncData.mu.Lock()
+	mw.syncData.syncing = false
+	mw.syncData.synced = true
+	mw.syncData.mu.Unlock()
+
+	// begin indexing transactions after sync is completed,
+	// syncProgressListeners.OnSynced() will be invoked after transactions are indexed
+	var txIndexing errgroup.Group
+	txIndexing.Go(wallet.IndexTransactions)
+	go func() {
+		err := txIndexing.Wait()
+		if err != nil {
+			log.Errorf("Tx Index Error: %v", err)
+		}
+
+		for _, syncProgressListener := range mw.syncProgressListeners() {
+			syncProgressListener.OnSyncCompleted()
+		}
+	}()
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/btcsuite/btcwallet/chain"
 	"github.com/btcsuite/btcwallet/wallet"
 	"github.com/btcsuite/btcwallet/wtxmgr"
+	"github.com/c-ollins/btclibwallet/neutrinoclient"
 	"github.com/jrick/logrotate/rotator"
 	"github.com/lightninglabs/neutrino"
 )
@@ -50,6 +51,7 @@ var (
 	txmgrLog  = backendLog.Logger("TMGR")
 	chainLog  = backendLog.Logger("CHNS")
 	btcnLog   = backendLog.Logger("BTCN")
+	neutLog   = backendLog.Logger("NEUT")
 )
 
 // Initialize package-global logger variables.
@@ -57,6 +59,7 @@ func init() {
 	wallet.UseLogger(walletLog)
 	wtxmgr.UseLogger(txmgrLog)
 	chain.UseLogger(chainLog)
+	neutrinoclient.UseLogger(neutLog)
 	if true {
 		neutrino.UseLogger(btcnLog)
 	}
@@ -69,6 +72,7 @@ var subsystemLoggers = map[string]btclog.Logger{
 	"TMGR": txmgrLog,
 	"CHNS": chainLog,
 	"BTCN": btcnLog,
+	"NEUT": neutLog,
 }
 
 // initLogRotator initializes the logging rotater to write logs to logFile and

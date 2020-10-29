@@ -31,8 +31,8 @@ require (
 )
 
 replace (
-	github.com/btcsuite/btcwallet => github.com/C-ollins/btcwallet v0.0.0-20201028031044-8a5e3cc314c3
-	github.com/lightninglabs/neutrino => github.com/C-ollins/neutrino v0.11.1-0.20201019042253-3659f32ca2d5
+	github.com/btcsuite/btcwallet => github.com/C-ollins/btcwallet v0.0.0-20201029044811-48cd7e4cb442
+	github.com/lightninglabs/neutrino => github.com/C-ollins/neutrino v0.11.1-0.20201028075217-1535c1765f1a
 )
 
 go 1.13

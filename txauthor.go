@@ -78,7 +78,7 @@ func (tx *TxAuthor) TotalSendAmount() *Amount {
 }
 
 func (tx *TxAuthor) EstimateFeeAndSize() (*TxFeeAndSize, error) {
-	unsignedTx, err := tx.constructTransaction(true)
+	unsignedTx, err := tx.constructTransaction()
 	if err != nil {
 		return nil, translateError(err)
 	}
@@ -128,7 +128,7 @@ func (tx *TxAuthor) Broadcast(privatePassphrase []byte) ([]byte, error) {
 		return nil, fmt.Errorf("chain client is nil")
 	}
 
-	unsignedTx, err := tx.constructTransaction(false)
+	unsignedTx, err := tx.constructTransaction()
 	if err != nil {
 		return nil, translateError(err)
 	}
@@ -201,10 +201,12 @@ func (tx *TxAuthor) Broadcast(privatePassphrase []byte) ([]byte, error) {
 	return txHash[:], nil
 }
 
-func (tx *TxAuthor) constructTransaction(dryRun bool) (*txauthor.AuthoredTx, error) {
+func (tx *TxAuthor) constructTransaction() (*txauthor.AuthoredTx, error) {
 	var err error
 	var outputs = make([]*wire.TxOut, 0)
 	var changeSource txauthor.ChangeSource
+
+	var sendMax = false
 
 	ctx := tx.sourceWallet.shutdownContext()
 
@@ -215,25 +217,20 @@ func (tx *TxAuthor) constructTransaction(dryRun bool) (*txauthor.AuthoredTx, err
 		}
 
 		// check if multiple destinations are set to receive max amount
-		if destination.SendMax && changeSource != nil {
+		if destination.SendMax && sendMax {
 			return nil, fmt.Errorf("cannot send max amount to multiple recipients")
 		}
 
-		if destination.SendMax {
-			// Use this destination address to make a changeSource rather than a tx output.
-			changeSource = txhelper.MakeTxChangeSource(destination.Address, tx.sourceWallet.chainParams)
-		} else {
-			output, err := txhelper.MakeTxOutput(destination.Address, destination.AtomAmount, tx.sourceWallet.chainParams)
-			if err != nil {
-				log.Errorf("constructTransaction: error preparing tx output: %v", err)
-				return nil, fmt.Errorf("make tx output error: %v", err)
-			}
-
-			outputs = append(outputs, output)
+		output, err := txhelper.MakeTxOutput(destination.Address, destination.AtomAmount, tx.sourceWallet.chainParams)
+		if err != nil {
+			log.Errorf("constructTransaction: error preparing tx output: %v", err)
+			return nil, fmt.Errorf("make tx output error: %v", err)
 		}
+
+		outputs = append(outputs, output)
 	}
 
-	if changeSource == nil {
+	if !sendMax {
 		// dcrwallet should ordinarily handle cases where a nil changeSource
 		// is passed to `wallet.NewUnsignedTransaction` but the changeSource
 		// generated there errors on internal gap address limit exhaustion
@@ -248,7 +245,13 @@ func (tx *TxAuthor) constructTransaction(dryRun bool) (*txauthor.AuthoredTx, err
 	}
 
 	requiredConfirmations := tx.sourceWallet.RequiredConfirmations()
-	return tx.sourceWallet.internal.CreateSimpleTx(tx.sourceAccountNumber, outputs, requiredConfirmations, txrules.DefaultRelayFeePerKb, dryRun)
+
+	inputSource, err := tx.sourceWallet.internal.MakeInputSource(tx.sourceAccountNumber, requiredConfirmations, sendMax)
+	if err != nil {
+		return nil, err
+	}
+
+	return txauthor.NewUnsignedTransaction(outputs, txrules.DefaultRelayFeePerKb, inputSource, changeSource)
 }
 
 // changeSource derives an internal address from the source wallet and account

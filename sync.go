@@ -10,10 +10,9 @@ import (
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcwallet/chain"
 	"github.com/btcsuite/btcwallet/walletdb"
-	"github.com/btcsuite/btcwallet/wtxmgr"
+	"github.com/c-ollins/btclibwallet/neutrinoclient"
 	"github.com/decred/dcrwallet/errors/v2"
 	"github.com/lightninglabs/neutrino"
-	"golang.org/x/sync/errgroup"
 )
 
 // reading/writing of properties of this struct are protected by mutex.x
@@ -221,21 +220,18 @@ func (mw *MultiWallet) SpvSync() error {
 				ChainParams:  *mw.chainParams,
 				ConnectPeers: validPeerAddresses,
 				AddPeers:     []string{}, //TODO
-			}, mw.spvSyncNotificationCallbacks())
+			}, mw)
 		if err != nil {
 			log.Errorf("Couldn't create Neutrino ChainService: %s", err)
 			return
 		}
 
 		log.Info("Starting spv")
-		chainClient := chain.NewNeutrinoClient(mw.chainParams, chainService)
-		err = chainClient.Start()
-		if err != nil {
-			log.Errorf("Couldn't start Neutrino client: %s", err)
-			return
-		}
-
+		chainClient := neutrinoclient.NewNeutrinoClient(wallet.internal, mw.chainParams, chainService)
+		chainClient.SetNotifications(mw)
 		mw.setNetworkBackend(chainClient)
+		wallet.internal.SynchronizeRPC(mw.chainClient)
+		mw.chainClient.Start()
 
 		chainClient.WaitForShutdown()
 		log.Info("Chainclient stopped")
@@ -244,63 +240,6 @@ func (mw *MultiWallet) SpvSync() error {
 		mw.resetSyncData()
 	}()
 	return nil
-}
-
-func (mw *MultiWallet) registerNotifications() {
-	for {
-		select {
-		case n, ok := <-mw.chainClient.Notifications():
-			if !ok {
-				return
-			}
-
-			switch n := n.(type) {
-			case chain.ClientConnected:
-				log.Info("Client conected")
-			case chain.BlockConnected:
-				if mw.IsSynced() {
-					log.Info("block connected")
-				}
-			case chain.BlockDisconnected:
-				log.Info("block disconnected")
-			case chain.RelevantTx:
-				log.Info("relevant transaction")
-			case chain.FilteredBlockConnected:
-				// log.Info("filtered block connected")
-			case *chain.RescanProgress:
-
-				wallet := mw.WalletWithID(1)
-
-				_, bestBlock, _ := mw.chainClient.GetBestBlock()
-
-				rescanProgressReport := &RescanProgressReport{
-					TotalHeadersToScan:  bestBlock,
-					CurrentRescanHeight: n.Height,
-					RescanProgress:      (n.Height / bestBlock) * 100,
-				}
-
-				for _, syncProgressListener := range mw.syncProgressListeners() {
-					syncProgressListener.OnRescanProgress(rescanProgressReport)
-				}
-
-				log.Infof("rescan progress %d of %d, Synced: %v",
-					n.Height, bestBlock, wallet.internal.ChainSynced())
-
-			case *chain.RescanFinished:
-
-				_, bestBlock, _ := mw.chainClient.GetBestBlock()
-				wallet := mw.WalletWithID(1)
-				log.Infof("Wallet best block: %d, Chain bestBlock: %d", wallet.GetBestBlock(), bestBlock)
-				log.Info("Rescan done, Synced: ", wallet.internal.ChainSynced())
-				wallet.internal.SetChainSynced(true) // This might be wrong
-				mw.synced()
-			}
-
-		case <-mw.syncData.syncCanceled:
-			log.Info("Sync cancelled")
-			return
-		}
-	}
 }
 
 func (mw *MultiWallet) RestartSpvSync() error {
@@ -350,37 +289,6 @@ func (mw *MultiWallet) resetSyncData() {
 	}
 }
 
-func (mw *MultiWallet) synced() {
-
-	wallet := mw.wallets[1]
-	mw.listenForTransactions(wallet.ID)
-	log.Info("Synced")
-
-	mw.syncData.mu.Lock()
-	mw.syncData.syncing = false
-	mw.syncData.synced = true
-	mw.syncData.mu.Unlock()
-
-	bal, _ := wallet.GetAccountBalance(0)
-	log.Info("Balance: ", bal.Total)
-
-	// begin indexing transactions after sync is completed,
-	// syncProgressListeners.OnSynced() will be invoked after transactions are indexed
-	var txIndexing errgroup.Group
-	txIndexing.Go(wallet.IndexTransactions)
-
-	go func() {
-		err := txIndexing.Wait()
-		if err != nil {
-			log.Errorf("Tx Index Error: %v", err)
-		}
-
-		for _, syncProgressListener := range mw.syncProgressListeners() {
-			syncProgressListener.OnSyncCompleted()
-		}
-	}()
-}
-
 func (wallet *Wallet) Rescan() error {
 	if wallet.IsSyncing() {
 
@@ -402,12 +310,12 @@ func (wallet *Wallet) Rescan() error {
 		}
 
 		log.Infof("Starting manual rescan with %d address froom %d account", len(accountAddresses), len(accounts.Acc))
-		go func() {
-			err = wallet.internal.Rescan(accountAddresses, []wtxmgr.Credit{})
-			if err != nil {
-				log.Error(err)
-			}
-		}()
+		// go func() {
+		// 	err = wallet.internal.Rescan(startHeight)
+		// 	if err != nil {
+		// 		log.Error(err)
+		// 	}
+		// }()
 
 		return nil
 	}
