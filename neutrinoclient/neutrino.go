@@ -35,6 +35,7 @@ type NeutrinoClient struct {
 	// Holds all potential callbacks used to notify clients
 	notifications           Notifications
 	walletSynced            bool
+	rescanning              bool
 	lastFilteredBlockHeader *wire.BlockHeader
 	scanStartBlock          waddrmgr.BlockStamp
 	currentBlock            *waddrmgr.BlockStamp
@@ -154,6 +155,13 @@ func (s *NeutrinoClient) WaitForShutdown() {
 	s.wg.Wait()
 }
 
+func (s *NeutrinoClient) IsRescanning() bool {
+	s.clientMtx.Lock()
+	defer s.clientMtx.Unlock()
+
+	return s.rescanning
+}
+
 func (s *NeutrinoClient) StartupSync() error {
 	birthdayStamp, err := s.wallet.BirthdayBlock()
 	if err != nil {
@@ -174,6 +182,7 @@ func (s *NeutrinoClient) StartupSync() error {
 
 	s.scanStartBlock = s.wallet.Manager.SyncedTo()
 	s.walletSynced = false
+	s.rescanning = false
 	s.lastFilteredBlockHeader = nil
 	s.rescanQuit = make(chan struct{})
 	s.clientMtx.Unlock()
@@ -441,7 +450,10 @@ func (s *NeutrinoClient) Rescan(startHeight int64) error {
 
 		s.clientMtx.Unlock()
 		close(s.rescanQuit)
+
+		log.Info("Waiting for rescan to shutdown")
 		rescan.WaitForShutdown()
+		log.Info("Rescan shutdown successful")
 
 		s.clientMtx.Lock()
 		s.rescan = nil
@@ -522,6 +534,7 @@ func (s *NeutrinoClient) Rescan(startHeight int64) error {
 		neutrino.WatchInputs(inputsToWatch...),
 	)
 	s.rescan = newRescan
+	s.rescanning = true
 	s.rescanErr = s.rescan.Start()
 	s.clientMtx.Unlock()
 
@@ -629,7 +642,7 @@ func (s *NeutrinoClient) onBlockConnected(hash *chainhash.Hash, height int32, bl
 		sendRescanProgress()
 	} else {
 
-		if !s.walletSynced {
+		if !s.walletSynced || s.rescanning {
 
 			sendRescanProgress()
 
@@ -637,6 +650,7 @@ func (s *NeutrinoClient) onBlockConnected(hash *chainhash.Hash, height int32, bl
 
 			s.wallet.SetChainSynced(true)
 			s.walletSynced = true
+			s.rescanning = false
 
 			s.rescanFinished()
 			s.synced()

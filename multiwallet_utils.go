@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/asdine/storm"
-	"github.com/btcsuite/btcwallet/chain"
 	w "github.com/btcsuite/btcwallet/wallet"
+	"github.com/c-ollins/btclibwallet/neutrinoclient"
 	"github.com/decred/dcrwallet/errors/v2"
 	"github.com/kevinburke/nacl"
 	"github.com/kevinburke/nacl/secretbox"
@@ -71,7 +71,7 @@ func (mw *MultiWallet) loadWalletTemporarily(ctx context.Context, walletDataDir,
 	return nil
 }
 
-func (mw *MultiWallet) setNetworkBackend(chainClient chain.Interface) {
+func (mw *MultiWallet) setNetworkBackend(chainClient *neutrinoclient.NeutrinoClient) {
 	mw.chainClient = chainClient
 
 	if chainClient == nil {

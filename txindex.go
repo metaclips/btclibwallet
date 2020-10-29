@@ -16,7 +16,13 @@ func (wallet *Wallet) IndexTransactions() error {
 	endHeight := wallet.GetBestBlock()
 
 	if beginHeight <= 0 {
-		beginHeight = endHeight - 400 // TODO: confirm this logic
+		birthdayBlock, err := wallet.internal.BirthdayBlock()
+		if err != nil {
+			log.Errorf("[%d] birthday block: %v", wallet.ID, err)
+			return err
+		}
+
+		beginHeight = birthdayBlock.Height
 	}
 
 	startBlock := w.NewBlockIdentifierFromHeight(beginHeight)

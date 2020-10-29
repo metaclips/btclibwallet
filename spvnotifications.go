@@ -4,7 +4,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/c-ollins/btclibwallet/neutrinoclient"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -136,14 +135,11 @@ func (mw *MultiWallet) FetchMissingCFiltersFinished() {
 	log.Infof("Wallet best block: %d, Chain bestBlock: %d", wallet.GetBestBlock(), bestBlock)
 	log.Infof("FetchMissingCFiltersFinished")
 
-	switch client := mw.chainClient.(type) {
-	case *neutrinoclient.NeutrinoClient:
-		log.Info("Starting sync")
+	log.Info("Starting sync")
 
-		err := client.StartupSync()
-		if err != nil {
-			log.Info("Error occured sync startup:", err)
-		}
+	err := mw.chainClient.StartupSync()
+	if err != nil {
+		log.Info("Error occured sync startup:", err)
 	}
 }
 

@@ -13,8 +13,8 @@ import (
 	"github.com/asdine/storm"
 	"github.com/asdine/storm/q"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/btcsuite/btcwallet/chain"
 	w "github.com/btcsuite/btcwallet/wallet"
+	"github.com/c-ollins/btclibwallet/neutrinoclient"
 	"github.com/c-ollins/btclibwallet/txindex"
 	"github.com/c-ollins/btclibwallet/utils"
 	"github.com/decred/dcrwallet/errors/v2"
@@ -27,7 +27,7 @@ type MultiWallet struct {
 	db      *storm.DB
 
 	chainParams *chaincfg.Params
-	chainClient chain.Interface
+	chainClient *neutrinoclient.NeutrinoClient
 	wallets     map[int]*Wallet
 	syncData    *syncData
 
@@ -399,7 +399,7 @@ func (mw *MultiWallet) saveNewWallet(wallet *Wallet, setupWallet func() error) (
 		return nil, errors.New(ErrExist)
 	}
 
-	if mw.IsConnectedToDecredNetwork() {
+	if mw.IsConnectedToBitcoinNetwork() {
 		return nil, errors.New(ErrSyncAlreadyInProgress)
 	}
 	// Perform database save operations in batch transaction
@@ -471,7 +471,7 @@ func (mw *MultiWallet) RenameWallet(walletID int, newName string) error {
 
 func (mw *MultiWallet) DeleteWallet(walletID int, privPass []byte) error {
 
-	if mw.IsConnectedToDecredNetwork() {
+	if mw.IsConnectedToBitcoinNetwork() {
 		return errors.New(ErrSyncAlreadyInProgress)
 	}
 

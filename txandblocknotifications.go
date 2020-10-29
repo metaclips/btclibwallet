@@ -32,7 +32,7 @@ func (mw *MultiWallet) listenForTransactions(walletID int) {
 					}
 
 					if !overwritten {
-						log.Infof("[%d] New Transaction %s", wallet.ID, tempTransaction.Hash)
+						log.Infof("[%d] New Transaction: %s", wallet.ID, tempTransaction.Hash)
 
 						result, err := json.Marshal(tempTransaction)
 						if err != nil {
@@ -67,7 +67,7 @@ func (mw *MultiWallet) listenForTransactions(walletID int) {
 								mw.mempoolTransactionNotification(string(result))
 							}
 
-							log.Infof("[%d] New confirmed transaction", wallet.ID, transaction.Hash)
+							log.Infof("[%d] New confirmed transaction: %s", wallet.ID, transaction.Hash)
 							mw.publishTransactionConfirmed(wallet.ID, transaction.Hash.String(), int32(block.Height))
 						}
 					}

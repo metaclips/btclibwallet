@@ -286,9 +286,14 @@ func (mw *MultiWallet) resetSyncData() {
 	}
 }
 
-func (wallet *Wallet) Rescan() error {
-	if wallet.IsSyncing() {
+func (mw *MultiWallet) Rescan() error {
+	if mw.IsConnectedToBitcoinNetwork() {
 
+		if mw.IsSyncing() {
+			return fmt.Errorf(ErrInvalid)
+		}
+
+		wallet := mw.WalletWithID(1)
 		accounts, err := wallet.GetAccountsRaw()
 		if err != nil {
 			return err
@@ -307,12 +312,23 @@ func (wallet *Wallet) Rescan() error {
 		}
 
 		log.Infof("Starting manual rescan with %d address froom %d account", len(accountAddresses), len(accounts.Acc))
-		// go func() {
-		// 	err = wallet.internal.Rescan(startHeight)
-		// 	if err != nil {
-		// 		log.Error(err)
-		// 	}
-		// }()
+		go func() {
+			birthday, err := wallet.internal.BirthdayBlock()
+			if err != nil {
+				log.Error(err)
+				return
+			}
+
+			err = wallet.txDB.ClearSavedTransactions(&Transaction{})
+			if err != nil {
+				log.Error(err)
+			}
+
+			err = mw.chainClient.Rescan(int64(birthday.Height))
+			if err != nil {
+				log.Error(err)
+			}
+		}()
 
 		return nil
 	}
@@ -374,7 +390,15 @@ func (wallet *Wallet) IsSyncing() bool {
 	return wallet.internal.SynchronizingToNetwork()
 }
 
-func (mw *MultiWallet) IsConnectedToDecredNetwork() bool {
+func (mw *MultiWallet) IsRescanning() bool {
+	if mw.IsSynced() {
+		return mw.chainClient.IsRescanning()
+	}
+
+	return false
+}
+
+func (mw *MultiWallet) IsConnectedToBitcoinNetwork() bool {
 	mw.syncData.mu.RLock()
 	defer mw.syncData.mu.RUnlock()
 	return mw.syncData.syncing || mw.syncData.synced
