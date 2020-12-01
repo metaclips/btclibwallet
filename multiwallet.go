@@ -396,7 +396,7 @@ func (mw *MultiWallet) saveNewWallet(wallet *Wallet, setupWallet func() error) (
 	if err != nil {
 		return nil, err
 	} else if exists {
-		return nil, errors.New(ErrExist)
+		return nil, errors.New(ErrWalletNameExist)
 	}
 
 	if mw.IsConnectedToBitcoinNetwork() {
@@ -496,6 +496,10 @@ func (mw *MultiWallet) DeleteWallet(walletID int, privPass []byte) error {
 }
 
 func (mw *MultiWallet) WalletWithID(walletID int) *Wallet {
+	if walletID > len(mw.wallets) {
+		return nil
+	}
+
 	if wallet, ok := mw.wallets[walletID]; ok {
 		return wallet
 	}
